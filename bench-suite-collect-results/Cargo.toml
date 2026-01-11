@@ -1,0 +1,11 @@
+[package]
+name = "bench-suite-collect-results"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+polars = "0.52.0"
+
+
+bench-suite-types = {path = "../bench-suite-types"}
+anyhow = "1.0.100"
