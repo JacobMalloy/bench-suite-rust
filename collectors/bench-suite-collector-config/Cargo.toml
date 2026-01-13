@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-polars = "0.52.0"
+polars = {workspace = true}
 bench-suite-types = {path="../../bench-suite-types"}
 bench-suite-collect-results = {path="../../bench-suite-collect-results"}
-anyhow = "1.0.100"
+anyhow = {workspace = true}

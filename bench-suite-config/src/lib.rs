@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::{collections::HashMap, fs::File, io::BufReader, path};
+use std::{collections::{HashMap,HashSet}, fs::File, io::BufReader, path};
 
 use bench_suite_types::{BenchSuiteConfig,BenchSuiteRun};
 
@@ -13,22 +13,22 @@ impl BenchSuiteTasks {
     pub fn new(config_file_path: &str) -> Result<Self> {
         let task_file = BufReader::new(
             File::open(config_file_path)
-                .with_context(|| std::format!("Failed to open task file {}", config_file_path))?,
+                .context(std::format!("Failed to open task file {}", config_file_path))?,
         );
 
         let task_config: BenchSuiteTaskConfig =
-            serde_json::from_reader(task_file).with_context(|| "Failed to parse task_file")?;
+            serde_json::from_reader(task_file).context("Failed to parse task_file")?;
 
         let bench_suite_location = path::Path::new(&task_config.location);
         let status_location = bench_suite_location.join("status.json");
         let status_reader = BufReader::new(
-            File::open(&status_location).with_context(|| "Failed to open status file specified")?,
+            File::open(&status_location).context("Failed to open status file specified")?,
         );
         let status: BenchSuiteStatus = serde_json::from_reader(status_reader)
-            .with_context(|| "Failed to parse status file")?;
+            .context("Failed to parse status file")?;
 
         let BenchSuiteStatus {
-            bench_index,
+            bench_index:_,
             benchmark_runs,
         } = status;
 
@@ -40,7 +40,7 @@ impl BenchSuiteTasks {
             .map(|(key, val)| key.parse::<u64>().map(|parsed| (parsed, val)))
             .collect();
         let benchmark_runs = benchmark_runs
-            .with_context(|| std::format!("The runs in {}", status_location.display()))?;
+            .context(std::format!("The runs in {}", status_location.display()))?;
 
         Ok(Self {
             runs: benchmark_runs,
@@ -48,12 +48,12 @@ impl BenchSuiteTasks {
         })
     }
 
-    pub fn to_collect(&self) -> impl Iterator<Item=(&u64,&BenchSuiteRun,Vec<&str>)>{
+    pub fn to_collect(&self) -> impl Iterator<Item=(u64,&BenchSuiteRun,Vec<&str>)>{
         self.runs.iter().filter_map(|(id, config)| {
-            let tmp:Vec<&str> = self.collections
+            let tmp:HashSet<&str> = self.collections
                 .iter()
                 .filter_map(|(location, collect_vals)| collect_vals.contains(config).then_some(location.as_str())).collect();
-            (!tmp.is_empty()).then_some((id,config,tmp))
+            (!tmp.is_empty()).then_some((*id,config,tmp.into_iter().collect()))
 
         })
     }
