@@ -5,7 +5,6 @@ use std::env;
 use std::fs::File;
 use std::hash::Hash;
 use std::io::BufReader;
-use std::panic::Location;
 use std::path::Path;
 use std::sync::Mutex;
 use std::sync::mpsc;
@@ -43,10 +42,40 @@ struct TableSubmitter<'scope, 'env> {
     local: HashMap<(String, String), mpsc::Sender<DataFrame>>,
     scope: &'scope std::thread::Scope<'scope, 'env>,
     base_location: &'scope str,
-    //lifetime:PhantomData<&'a KEY>,
 }
 
-fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {}
+fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {
+    let mut index: u64 = 0;
+    let mut data: Option<DataFrame> = None;
+    while let Ok(msg) = rx.recv() {
+        match &data {
+            Some(v) => {
+                v.vstack(&msg).unwrap();
+            }
+            None => data = Some(msg),
+        }
+        if let Some(v) = &mut data
+            && v.estimated_size() >= 750 * 1024 * 1024
+        {
+            ParquetWriter::new(File::open(format!("{}_{}.parquet", location, index)).unwrap())
+                .with_compression(ParquetCompression::Zstd(Some(
+                    ZstdLevel::try_new(15).unwrap(),
+                )))
+                .finish(v)
+                .unwrap();
+            data = None;
+            index += 1;
+        }
+    }
+    if let Some(v) = &mut data {
+        ParquetWriter::new(File::open(format!("{}_{}.parquet", location, index)).unwrap())
+            .with_compression(ParquetCompression::Zstd(Some(
+                ZstdLevel::try_new(15).unwrap(),
+            )))
+            .finish(v)
+            .unwrap();
+    }
+}
 
 impl<'scope, 'env> TableSubmitter<'scope, 'env>
 where
@@ -64,7 +93,7 @@ where
                 .or_insert_with(|| {
                     let (tx, rx) = mpsc::channel();
                     self.scope.spawn(|| {
-                        let mut path = Path::new(self.base_location).join(key.0);
+                        let path = Path::new(self.base_location).join(key.0).join(key.1);
                         parquet_thread(rx, path.to_str().unwrap().to_string());
                     });
                     tx
@@ -73,12 +102,15 @@ where
         });
         chan.send(value)
     }
-    pub fn new(scope: &'scope std::thread::Scope<'scope, 'env>,base_location:&'scope str) -> Self {
+    pub fn new(
+        scope: &'scope std::thread::Scope<'scope, 'env>,
+        base_location: &'scope str,
+    ) -> Self {
         Self {
             source: Arc::new(Mutex::new(HashMap::new())),
             local: HashMap::new(),
             scope,
-            base_location
+            base_location,
         }
     }
 }
@@ -125,10 +157,8 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<String, DataFrame>> {
     Ok(return_map)
 }
 
-fn process_thread<'a, T>(
-    queue: &ToCollectQueue<'a, T>,
-    mut submitter: TableSubmitter,
-) where
+fn process_thread<'a, T>(queue: &ToCollectQueue<'a, T>, mut submitter: TableSubmitter)
+where
     T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
 {
     while let Some((id, run, paths)) = queue.consume() {
@@ -144,7 +174,11 @@ fn process_thread<'a, T>(
         }
 
         for (key, mut val) in map.into_iter() {
-            val.with_column(Series::new(PlSmallStr::from_static("id"),vec![id;val.height()])).unwrap();
+            val.with_column(Series::new(
+                PlSmallStr::from_static("id"),
+                vec![id; val.height()],
+            ))
+            .unwrap();
             for p in paths.iter() {
                 //should probably try not to clone on the last one
                 submitter
@@ -165,7 +199,7 @@ fn main() {
     let queue = ToCollectQueue::new(config.to_collect());
 
     std::thread::scope(|x| {
-        let s = TableSubmitter::new(x,config.get_path().to_str().unwrap());
+        let s = TableSubmitter::new(x, config.get_path().to_str().unwrap());
         for _ in 0..10 {
             let tmp_s = s.clone();
             x.spawn(|| {
