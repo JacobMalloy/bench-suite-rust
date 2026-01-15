@@ -175,14 +175,45 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bench-suite-benchmark-configs"
+version = "0.1.0"
+dependencies = [
+ "bench-suite-collect-results",
+ "bench-suite-collector-config",
+]
+
+[[package]]
 name = "bench-suite-collect"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bench-suite-benchmark-configs",
+ "bench-suite-collect-results",
  "bench-suite-config",
  "bench-suite-types",
+ "polars",
  "tar",
  "xz2",
+]
+
+[[package]]
+name = "bench-suite-collect-results"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-types",
+ "lazy-read",
+ "polars",
+]
+
+[[package]]
+name = "bench-suite-collector-config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-collect-results",
+ "bench-suite-types",
+ "polars",
 ]
 
 [[package]]
@@ -1161,6 +1192,10 @@ dependencies = [
  "once_cell",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "lazy-read"
+version = "0.1.0"
 
 [[package]]
 name = "libc"

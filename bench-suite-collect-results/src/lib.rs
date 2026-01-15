@@ -1,23 +1,61 @@
+use anyhow::{Context, Result};
 use bench_suite_types::BenchSuiteRun;
+use lazy_read::{self, LazyRead};
 use polars::prelude::DataFrame;
-use anyhow::Result;
+use std::io::Read;
 
-pub struct FileInfo{
-    pub content:String,
-    pub name:String
+
+pub trait FileInfoInterface{
+    fn name(&self) -> &str; 
+    fn content_string(&mut self) -> Result<&str>; 
 }
 
-impl FileInfo{
-    pub fn name(&self)->&str{
-        &self.name
-    }
-    pub fn content(&self)->&str{
-        &self.content
-    }
+pub struct FileInfo<'a,T>
+where T:Read
+{
+    content: lazy_read::LazyRead<T>,
+    name: &'a str,
 }
 
 
-pub trait BenchSuiteCollect{
-    fn process_file(&mut self,input:&str,config:&BenchSuiteRun,file:&FileInfo);
-    fn get_result(self,config:&BenchSuiteRun) -> Result<Vec<(String,DataFrame)>>;
+impl <'a,T>FileInfoInterface for FileInfo<'a,T>
+where T:Read{
+    fn name(&self) -> &str {
+        self.name
+    }
+    fn content_string(&mut self) -> Result<&str> {
+        self.content
+            .get_string()
+            .context("Failed to read the files contents")
+    }
+}
+
+impl<'a, T> FileInfo<'a, T>
+where
+    T: std::io::Read,
+{
+    pub fn new(name: &'a str, content: T) -> Self {
+        FileInfo {
+            name,
+            content: LazyRead::new(content),
+        }
+    }
+    pub fn name(&self) -> &str {
+        self.name
+    }
+    pub fn content_string(&mut self) -> Result<&str> {
+        self.content
+            .get_string()
+            .context("Failed to read the files contents")
+    }
+}
+
+pub trait BenchSuiteCollect {
+    fn process_file(
+        &mut self,
+        config: &BenchSuiteRun,
+        file: &mut dyn FileInfoInterface,
+    ) -> Result<()>;
+
+    fn get_result(self:Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(String, DataFrame)>>;
 }

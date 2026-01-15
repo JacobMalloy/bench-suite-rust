@@ -1,18 +1,28 @@
-use bench_suite_collect_results::BenchSuiteCollect;
-use polars::prelude::DataFrame;
+use anyhow::Result;
+use bench_suite_collect_results::{BenchSuiteCollect,FileInfoInterface};
 use bench_suite_types::BenchSuiteRun;
-use anyhow;
+use polars::prelude::DataFrame;
 
-pub struct BenchSuiteCollectConfig{}
+#[derive(Default)]
+pub struct BenchSuiteCollectConfig {}
 
-impl BenchSuiteCollect for BenchSuiteCollectConfig{
-    fn process_file(&mut self,input:&str,config:&bench_suite_types::BenchSuiteRun,file:&bench_suite_collect_results::FileInfo) {
-        
+
+impl BenchSuiteCollectConfig{
+    pub fn boxed()->Box<dyn BenchSuiteCollect>{
+        Box::new(Self::default())
+    }
+}
+
+impl BenchSuiteCollect for BenchSuiteCollectConfig {
+    fn process_file(
+        &mut self,
+        _: &bench_suite_types::BenchSuiteRun,
+        _: &mut dyn FileInfoInterface,
+    ) -> Result<()> {
+        Ok(())
     }
 
-
-    fn get_result(self,config:&BenchSuiteRun) -> anyhow::Result<Vec<(String,DataFrame)>>{
-        vec![(String::from("config"),config.to_df()?)]
+    fn get_result(self:Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(String, DataFrame)>> {
+        Ok(vec![(String::from("config"), config.to_df()?)])
     }
-    
 }

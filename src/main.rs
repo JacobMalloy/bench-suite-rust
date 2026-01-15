@@ -1,10 +1,17 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
+use polars::prelude::*;
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
+use std::hash::Hash;
 use std::io::BufReader;
-use std::io::Read;
+use std::panic::Location;
+use std::path::Path;
 use std::sync::Mutex;
+use std::sync::mpsc;
 
+use bench_suite_collect_results::{BenchSuiteCollect, FileInfo};
+use bench_suite_config::BenchSuiteTasks;
 use bench_suite_types::BenchSuiteRun;
 
 struct ToCollectQueue<'a, T>
@@ -30,7 +37,53 @@ where
     }
 }
 
-fn process_run(run: &BenchSuiteRun) -> Result<()> {
+#[derive(Clone)]
+struct TableSubmitter<'scope, 'env> {
+    source: Arc<Mutex<HashMap<(String, String), mpsc::Sender<DataFrame>>>>,
+    local: HashMap<(String, String), mpsc::Sender<DataFrame>>,
+    scope: &'scope std::thread::Scope<'scope, 'env>,
+    base_location: &'scope str,
+    //lifetime:PhantomData<&'a KEY>,
+}
+
+fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {}
+
+impl<'scope, 'env> TableSubmitter<'scope, 'env>
+where
+    (String, String): Hash + std::cmp::Eq + Clone,
+{
+    pub fn submit(
+        &mut self,
+        key: (String, String),
+        value: DataFrame,
+    ) -> std::result::Result<(), std::sync::mpsc::SendError<DataFrame>> {
+        let chan = self.local.entry(key.clone()).or_insert_with(|| {
+            let mut locked = self.source.lock().unwrap();
+            locked
+                .entry(key.clone())
+                .or_insert_with(|| {
+                    let (tx, rx) = mpsc::channel();
+                    self.scope.spawn(|| {
+                        let mut path = Path::new(self.base_location).join(key.0);
+                        parquet_thread(rx, path.to_str().unwrap().to_string());
+                    });
+                    tx
+                })
+                .clone()
+        });
+        chan.send(value)
+    }
+    pub fn new(scope: &'scope std::thread::Scope<'scope, 'env>,base_location:&'scope str) -> Self {
+        Self {
+            source: Arc::new(Mutex::new(HashMap::new())),
+            local: HashMap::new(),
+            scope,
+            base_location
+        }
+    }
+}
+
+fn process_run(run: &BenchSuiteRun) -> Result<HashMap<String, DataFrame>> {
     let tarfile = BufReader::new(File::open(&run.tar_file)?);
     let tarfile = xz2::read::XzDecoder::new(tarfile);
     let mut tarfile = tar::Archive::new(tarfile);
@@ -39,32 +92,66 @@ fn process_run(run: &BenchSuiteRun) -> Result<()> {
         .entries()
         .context("Failed to get entries from tar file")?;
 
+    let mut collectors: Vec<Box<dyn BenchSuiteCollect>> =
+        bench_suite_benchmark_configs::get_collect_config(&run.benchmark)?
+            .iter()
+            .map(|x| x())
+            .collect();
+
     for file in entries {
-        let mut file = file.context("Failed to get file from tar")?;
+        let file = file.context("Failed to get file from tar")?;
         let path = file
             .path()
             .context("Failed to get the path from tar file")?
             .to_str()
             .context("Failed to turn path to string".to_string())?
             .to_string();
-        let mut file_content = String::new();
-        file.read_to_string(&mut file_content).context(format!(
-            "Failed to read the file {} from {}",
-            path, run.tar_file
-        ))?;
+        let mut file_info = FileInfo::new(path.as_str(), file);
 
+        for i in collectors.iter_mut() {
+            i.process_file(run, &mut file_info)?;
+        }
     }
 
-    Ok(())
+    let mut return_map: HashMap<String, DataFrame> = HashMap::new();
+    for collector in collectors {
+        for (key, val) in BenchSuiteCollect::get_result(collector, run)? {
+            return_map
+                .insert(key, val)
+                .ok_or_else(|| anyhow!(std::format!("Repeated the table name ")))?;
+        }
+    }
+
+    Ok(return_map)
 }
 
-fn process_thread<'a, T>(queue: &ToCollectQueue<'a, T>)
-where
+fn process_thread<'a, T>(
+    queue: &ToCollectQueue<'a, T>,
+    mut submitter: TableSubmitter,
+) where
     T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
 {
     while let Some((id, run, paths)) = queue.consume() {
-        println!("{} {:?} {:?}",id,run,paths);
+        let result = process_run(run);
+        let (mut map, mut status) = match result {
+            Ok(v) => (v, "success".to_string()),
+            Err(e) => (HashMap::new(), e.to_string()),
+        };
 
+        if map.contains_key("status") {
+            status = "Run emmitted a status table".to_string();
+            map = HashMap::new();
+        }
+
+        for (key, mut val) in map.into_iter() {
+            val.with_column(Series::new(PlSmallStr::from_static("id"),vec![id;val.height()])).unwrap();
+            for p in paths.iter() {
+                //should probably try not to clone on the last one
+                submitter
+                    .submit((p.to_string(), key.clone()), val.clone())
+                    .unwrap();
+            }
+        }
     }
 }
 
@@ -73,14 +160,16 @@ fn main() {
         .nth(1)
         .expect("You need to provide a an argument for the path");
 
-    let config = bench_suite_config::BenchSuiteTasks::new(&config_file_path).unwrap();
+    let config = BenchSuiteTasks::new(&config_file_path).unwrap();
 
     let queue = ToCollectQueue::new(config.to_collect());
 
     std::thread::scope(|x| {
+        let s = TableSubmitter::new(x,config.get_path().to_str().unwrap());
         for _ in 0..10 {
+            let tmp_s = s.clone();
             x.spawn(|| {
-                process_thread(&queue);
+                process_thread(&queue, tmp_s);
             });
         }
     });

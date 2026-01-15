@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::{collections::{HashMap,HashSet}, fs::File, io::BufReader, path};
+use std::{collections::{HashMap,HashSet}, fs::File, io::BufReader, path::{self, PathBuf}};
 
 use bench_suite_types::{BenchSuiteConfig,BenchSuiteRun};
 
 pub struct BenchSuiteTasks {
     runs: HashMap<u64, BenchSuiteRun>,
     collections: HashMap<String, BenchSuiteConfig>,
+    location:PathBuf
 }
 
 impl BenchSuiteTasks {
@@ -45,7 +46,12 @@ impl BenchSuiteTasks {
         Ok(Self {
             runs: benchmark_runs,
             collections: task_config.collect,
+            location:bench_suite_location.to_path_buf()
         })
+    }
+
+    pub fn get_path(&self)->&PathBuf{
+        &self.location
     }
 
     pub fn to_collect(&self) -> impl Iterator<Item=(u64,&BenchSuiteRun,Vec<&str>)>{

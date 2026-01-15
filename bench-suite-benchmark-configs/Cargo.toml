@@ -1,0 +1,8 @@
+[package]
+name = "bench-suite-benchmark-configs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bench-suite-collector-config = {path = "../collectors/bench-suite-collector-config/"}
+bench-suite-collect-results = {path = "../bench-suite-collect-results/"}

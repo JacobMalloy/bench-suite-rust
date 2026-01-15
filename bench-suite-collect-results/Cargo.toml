@@ -7,5 +7,5 @@ edition = "2024"
 polars = {workspace = true}
 anyhow = {workspace = true}
 
-
 bench-suite-types = {path = "../bench-suite-types"}
+lazy-read = {path = "../lazy-read"}
