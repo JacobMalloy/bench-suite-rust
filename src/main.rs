@@ -52,12 +52,14 @@ fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {
             Some(v) => {
                 v.vstack(&msg).unwrap();
             }
-            None => data = Some(msg),
-        }
+            None => {
+                data = Some(msg);
+            }
+        };
         if let Some(v) = &mut data
             && v.estimated_size() >= 750 * 1024 * 1024
         {
-            ParquetWriter::new(File::open(format!("{}_{}.parquet", location, index)).unwrap())
+            ParquetWriter::new(File::create(format!("{}_{}.parquet", location, index)).unwrap())
                 .with_compression(ParquetCompression::Zstd(Some(
                     ZstdLevel::try_new(15).unwrap(),
                 )))
@@ -68,7 +70,7 @@ fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {
         }
     }
     if let Some(v) = &mut data {
-        ParquetWriter::new(File::open(format!("{}_{}.parquet", location, index)).unwrap())
+        ParquetWriter::new(File::create(format!("{}_{}.parquet", location, index)).unwrap())
             .with_compression(ParquetCompression::Zstd(Some(
                 ZstdLevel::try_new(15).unwrap(),
             )))
@@ -129,7 +131,6 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<String, DataFrame>> {
             .iter()
             .map(|x| x())
             .collect();
-
     for file in entries {
         let file = file.context("Failed to get file from tar")?;
         let path = file
@@ -147,10 +148,11 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<String, DataFrame>> {
 
     let mut return_map: HashMap<String, DataFrame> = HashMap::new();
     for collector in collectors {
-        for (key, val) in BenchSuiteCollect::get_result(collector, run)? {
-            return_map
-                .insert(key, val)
-                .ok_or_else(|| anyhow!(std::format!("Repeated the table name ")))?;
+        let res = BenchSuiteCollect::get_result(collector, run);
+        for (key, val) in res? {
+            if return_map.insert(key, val).is_some() {
+                return Err(anyhow!(std::format!("Repeated the table name ")));
+            }
         }
     }
 
@@ -200,11 +202,12 @@ fn main() {
 
     std::thread::scope(|x| {
         let s = TableSubmitter::new(x, config.get_path().to_str().unwrap());
-        for _ in 0..10 {
+        for _ in 0..1 {
             let tmp_s = s.clone();
             x.spawn(|| {
                 process_thread(&queue, tmp_s);
             });
         }
+        drop(s)
     });
 }
