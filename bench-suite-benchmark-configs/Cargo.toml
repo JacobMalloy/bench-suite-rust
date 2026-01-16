@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 bench-suite-collector-config = {path = "../collectors/bench-suite-collector-config/"}
+bench-suite-collector-time = {path = "../collectors/bench-suite-collector-time/"}
 bench-suite-collect-results = {path = "../bench-suite-collect-results/"}

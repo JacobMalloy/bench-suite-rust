@@ -2,9 +2,10 @@
     "location":"/home/jmalloy1/results/bench_suite7",
 
     "collect":{
-        "dacapo_samples2.db":{
+        "test.db":{
             "benchmark":["dacapo_samples2","dacapo_find_min_timeout"],
-            "timeout":[7200]
+            "timeout":[7200],
+            "dacapo_benchmark":["graphchi","graphchi~large"]
         }
     }
 }

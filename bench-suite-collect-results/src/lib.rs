@@ -8,6 +8,7 @@ use std::io::Read;
 pub trait FileInfoInterface{
     fn name(&self) -> &str; 
     fn content_string(&mut self) -> Result<&str>; 
+    fn content_bytes(&mut self) -> Result<&[u8]>;
 }
 
 pub struct FileInfo<'a,T>
@@ -28,6 +29,11 @@ where T:Read{
             .get_string()
             .context("Failed to read the files contents")
     }
+    fn content_bytes(&mut self) -> Result<&[u8]> {
+        self.content
+            .get_bytes()
+            .context("Failed to read the files contents")
+    }
 }
 
 impl<'a, T> FileInfo<'a, T>
@@ -42,12 +48,7 @@ where
     }
     pub fn name(&self) -> &str {
         self.name
-    }
-    pub fn content_string(&mut self) -> Result<&str> {
-        self.content
-            .get_string()
-            .context("Failed to read the files contents")
-    }
+    } 
 }
 
 pub trait BenchSuiteCollect {

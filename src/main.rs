@@ -18,21 +18,26 @@ where
     T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
 {
     it: Mutex<T>,
+    pb:indicatif::ProgressBar
 }
 
 impl<'a, T> ToCollectQueue<'a, T>
 where
     T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
 {
-    fn new(input: T) -> Self {
+    fn new(input: T,progress:indicatif::ProgressBar) -> Self {
         Self {
             it: Mutex::new(input),
+            pb:progress
         }
     }
 
     fn consume(&self) -> Option<(u64, &'a BenchSuiteRun, Vec<&'a str>)> {
         let mut guard = self.it.lock().unwrap();
-        guard.next()
+        let tmp = guard.next();
+        self.pb.tick();
+        self.pb.inc(1);
+        tmp
     }
 }
 
@@ -198,11 +203,22 @@ fn main() {
 
     let config = BenchSuiteTasks::new(&config_file_path).unwrap();
 
-    let queue = ToCollectQueue::new(config.to_collect());
+    let progress = indicatif::MultiProgress::new();
+    let main_progress = progress.add(indicatif::ProgressBar::new_spinner());
+    main_progress.set_style(
+        indicatif::ProgressStyle::default_spinner()
+            .template("{spinner:.cyan} [{human_pos}] [{elapsed_precise}] {msg}")
+            .unwrap()
+            .tick_strings(&["▹▹▹▹▹", "▸▹▹▹▹", "▹▸▹▹▹", "▹▹▸▹▹", "▹▹▹▸▹", "▹▹▹▹▸"]),
+    );
+    main_progress.set_message("TodoStream...");
 
+
+
+    let queue = ToCollectQueue::new(config.to_collect(),main_progress);
     std::thread::scope(|x| {
         let s = TableSubmitter::new(x, config.get_path().to_str().unwrap());
-        for _ in 0..1 {
+        for _ in 0..10 {
             let tmp_s = s.clone();
             x.spawn(|| {
                 process_thread(&queue, tmp_s);

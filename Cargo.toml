@@ -1,5 +1,5 @@
 [workspace]
-members = ["bench-suite-benchmark-configs","lazy-read"]
+members = ["bench-suite-benchmark-configs", "collectors/bench-suite-collector-time","lazy-read"]
 
 [workspace.dependencies]
 #polars = {version="0.x", default-features=false, features=["csv","dtype-full","parquet"]}
@@ -25,3 +25,4 @@ polars = {workspace = true}
 anyhow = {workspace = true}
 xz2 = "0.1.7"
 tar = {workspace = true}
+indicatif = "0.18.3"
