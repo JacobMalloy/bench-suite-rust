@@ -7,5 +7,6 @@ edition = "2024"
 polars = {workspace = true}
 bench-suite-types = {path="../../bench-suite-types"}
 bench-suite-collect-results = {path="../../bench-suite-collect-results"}
+string-intern = {path="../../string-intern"}
 anyhow = {workspace = true}
 
