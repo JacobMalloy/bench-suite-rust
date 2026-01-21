@@ -1,5 +1,50 @@
 use serde::Deserialize;
 use polars::prelude::*;
+use string_intern::Intern;
+
+// Trait to convert a single value to a Series column
+// This abstracts over different types so the macro can use a uniform interface
+trait ToSeriesColumn {
+    fn to_series_column(&self, name: PlSmallStr) -> Series;
+}
+
+impl ToSeriesColumn for Intern {
+    fn to_series_column(&self, name: PlSmallStr) -> Series {
+        StringChunked::from_slice(name, &[self.as_str()]).into_series()
+    }
+}
+
+impl ToSeriesColumn for String {
+    fn to_series_column(&self, name: PlSmallStr) -> Series {
+        StringChunked::from_slice(name, &[self.as_str()]).into_series()
+    }
+}
+
+impl ToSeriesColumn for u64 {
+    fn to_series_column(&self, name: PlSmallStr) -> Series {
+        Series::new(name, std::slice::from_ref(self))
+    }
+}
+
+impl ToSeriesColumn for f64 {
+    fn to_series_column(&self, name: PlSmallStr) -> Series {
+        Series::new(name, std::slice::from_ref(self))
+    }
+}
+
+impl<T: ToSeriesColumn> ToSeriesColumn for Option<T> {
+    fn to_series_column(&self, name: PlSmallStr) -> Series {
+        match self {
+            Some(v) => v.to_series_column(name),
+            None => {
+                // Need to determine the type for a null Series
+                // Use a single-element series with null
+                Series::new_null(name, 1)
+            }
+        }
+    }
+}
+
 macro_rules! make_vectorized {
     ($original:ident, $vectorized:ident ,  { $($field:ident : $typ:ty),* $(,)? },
      optional:{$($opt_field:ident : $opt_typ:ty),* $(,)?}) => {
@@ -51,46 +96,47 @@ macro_rules! make_vectorized {
 
         impl $original{
             pub fn to_df(&self)->Result<DataFrame,polars::error::PolarsError>{
-                df![
+                let columns: Vec<Column> = vec![
                     $(
-                        stringify!($field) => std::slice::from_ref(&self.$field),
-                   )*
+                        self.$field.to_series_column(stringify!($field).into()).into(),
+                    )*
                     $(
-                        stringify!($opt_field) => std::slice::from_ref(&self.$opt_field),
-                   )*
-                ]
+                        self.$opt_field.to_series_column(stringify!($opt_field).into()).into(),
+                    )*
+                ];
+                DataFrame::new(columns)
             }
         }
     };
 }
 
 make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{ 
-    benchmark:String,
+    benchmark:Intern,
     tar_file:String,
     iteration:u64,
 } , optional:{
     timeout:u64,
     cpu_mask:u64,
     //java
-    jdk:String,
+    jdk:Intern,
     process_count:u64,
-    gc:String,
+    gc:Intern,
 
-    gc_logging:String,
+    gc_logging:Intern,
     memory_ratio:f64,
     concgcthreads:u64,
     
 
     //dacapo
-    dacapo_benchmark:String,
-    dacapo_location:String,
+    dacapo_benchmark:Intern,
+    dacapo_location:Intern,
     dacapo_threads:u64,
 
     //threadstat
-    threadstat_location:String,
+    threadstat_location:Intern,
 
     //cos
-    cos_config:String,
+    cos_config:Intern,
 
 
 });
