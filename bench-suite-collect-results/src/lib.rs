@@ -5,6 +5,9 @@ use polars::prelude::DataFrame;
 use std::io::Read;
 
 
+use string_intern::Intern;
+
+
 pub trait FileInfoInterface{
     fn name(&self) -> &str; 
     fn content_string(&mut self) -> Result<&str>; 
@@ -58,5 +61,5 @@ pub trait BenchSuiteCollect {
         file: &mut dyn FileInfoInterface,
     ) -> Result<()>;
 
-    fn get_result(self:Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(String, DataFrame)>>;
+    fn get_result(self:Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, DataFrame)>>;
 }

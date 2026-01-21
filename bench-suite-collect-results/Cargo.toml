@@ -9,3 +9,4 @@ anyhow = {workspace = true}
 
 bench-suite-types = {path = "../bench-suite-types"}
 lazy-read = {path = "../lazy-read"}
+string-intern = {path = "../string-intern/"}
