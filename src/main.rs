@@ -3,11 +3,12 @@ use polars::prelude::*;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
-use std::hash::Hash;
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::Mutex;
 use std::sync::mpsc;
+
+use string_intern::Intern;
 
 use bench_suite_collect_results::{BenchSuiteCollect, FileInfo};
 use bench_suite_config::BenchSuiteTasks;
@@ -18,17 +19,17 @@ where
     T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
 {
     it: Mutex<T>,
-    pb:indicatif::ProgressBar
+    pb: indicatif::ProgressBar,
 }
 
 impl<'a, T> ToCollectQueue<'a, T>
 where
     T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
 {
-    fn new(input: T,progress:indicatif::ProgressBar) -> Self {
+    fn new(input: T, progress: indicatif::ProgressBar) -> Self {
         Self {
             it: Mutex::new(input),
-            pb:progress
+            pb: progress,
         }
     }
 
@@ -43,13 +44,13 @@ where
 
 #[derive(Clone)]
 struct TableSubmitter<'scope, 'env> {
-    source: Arc<Mutex<HashMap<(String, String), mpsc::Sender<DataFrame>>>>,
-    local: HashMap<(String, String), mpsc::Sender<DataFrame>>,
+    source: Arc<Mutex<HashMap<(Intern, Intern), mpsc::Sender<DataFrame>>>>,
+    local: HashMap<(Intern, Intern), mpsc::Sender<DataFrame>>,
     scope: &'scope std::thread::Scope<'scope, 'env>,
     base_location: &'scope str,
 }
 
-fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {
+fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: std::path::PathBuf) {
     let mut index: u64 = 0;
     let mut data: Option<DataFrame> = None;
     while let Ok(msg) = rx.recv() {
@@ -64,7 +65,7 @@ fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {
         if let Some(v) = &mut data
             && v.estimated_size() >= 750 * 1024 * 1024
         {
-            ParquetWriter::new(File::create(format!("{}_{}.parquet", location, index)).unwrap())
+            ParquetWriter::new(File::create(format!("{}_{}.parquet", location.display(), index)).unwrap())
                 .with_compression(ParquetCompression::Zstd(Some(
                     ZstdLevel::try_new(15).unwrap(),
                 )))
@@ -75,7 +76,7 @@ fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {
         }
     }
     if let Some(v) = &mut data {
-        ParquetWriter::new(File::create(format!("{}_{}.parquet", location, index)).unwrap())
+        ParquetWriter::new(File::create(format!("{}_{}.parquet", location.display(), index)).unwrap())
             .with_compression(ParquetCompression::Zstd(Some(
                 ZstdLevel::try_new(15).unwrap(),
             )))
@@ -84,24 +85,24 @@ fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: String) {
     }
 }
 
-impl<'scope, 'env> TableSubmitter<'scope, 'env>
-where
-    (String, String): Hash + std::cmp::Eq + Clone,
-{
+impl<'scope, 'env> TableSubmitter<'scope, 'env> {
     pub fn submit(
         &mut self,
-        key: (String, String),
+        key: (Intern, Intern),
         value: DataFrame,
     ) -> std::result::Result<(), std::sync::mpsc::SendError<DataFrame>> {
-        let chan = self.local.entry(key.clone()).or_insert_with(|| {
-            let mut locked = self.source.lock().unwrap();
+        let base_location = self.base_location;
+        let scope = self.scope;
+        let source = &self.source;
+        let chan = self.local.entry(key).or_insert_with(|| {
+            let mut locked = source.lock().unwrap();
             locked
-                .entry(key.clone())
+                .entry(key)
                 .or_insert_with(|| {
                     let (tx, rx) = mpsc::channel();
-                    self.scope.spawn(|| {
-                        let path = Path::new(self.base_location).join(key.0).join(key.1);
-                        parquet_thread(rx, path.to_str().unwrap().to_string());
+                    scope.spawn(move || {
+                        let path = Path::new(base_location).join(key.0).join(key.1);
+                        parquet_thread(rx, path);
                     });
                     tx
                 })
@@ -122,7 +123,7 @@ where
     }
 }
 
-fn process_run(run: &BenchSuiteRun) -> Result<HashMap<String, DataFrame>> {
+fn process_run(run: &BenchSuiteRun) -> Result<HashMap<Intern, DataFrame>> {
     let tarfile = BufReader::new(File::open(&run.tar_file)?);
     let tarfile = xz2::read::XzDecoder::new(tarfile);
     let mut tarfile = tar::Archive::new(tarfile);
@@ -136,6 +137,9 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<String, DataFrame>> {
             .iter()
             .map(|x| x())
             .collect();
+
+    let mut parsing_issues: Vec<String> = Vec::new();
+
     for file in entries {
         let file = file.context("Failed to get file from tar")?;
         let path = file
@@ -147,19 +151,40 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<String, DataFrame>> {
         let mut file_info = FileInfo::new(path.as_str(), file);
 
         for i in collectors.iter_mut() {
-            i.process_file(run, &mut file_info)?;
-        }
-    }
-
-    let mut return_map: HashMap<String, DataFrame> = HashMap::new();
-    for collector in collectors {
-        let res = BenchSuiteCollect::get_result(collector, run);
-        for (key, val) in res? {
-            if return_map.insert(key, val).is_some() {
-                return Err(anyhow!(std::format!("Repeated the table name ")));
+            if let Err(e) = i.process_file(run, &mut file_info) {
+                parsing_issues.push(format!("process_file({}): {}", path, e));
             }
         }
     }
+
+    let mut return_map: HashMap<Intern, DataFrame> = HashMap::new();
+    for collector in collectors {
+        match BenchSuiteCollect::get_result(collector, run) {
+            Ok(results) => {
+                for (key, val) in results {
+                    if return_map.insert(key, val).is_some() {
+                        return Err(anyhow!(std::format!("Repeated the table name ")));
+                    }
+                }
+            }
+            Err(e) => {
+                parsing_issues.push(format!("get_result: {}", e));
+            }
+        }
+    }
+
+    // Get or create the status DataFrame, then add parse_status column
+    let status_df = return_map.entry(Intern::from_static("status")).or_insert_with(|| {
+        parsing_issues.push("no status file".to_string());
+        df!["status" => &["failed no status"]].unwrap()
+    });
+
+    let parse_status: Option<String> = if parsing_issues.is_empty() {
+        None
+    } else {
+        Some(parsing_issues.join("; "))
+    };
+    status_df.with_column(Column::new("parse_status".into(), &[parse_status]))?;
 
     Ok(return_map)
 }
@@ -169,16 +194,18 @@ where
     T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
 {
     while let Some((id, run, paths)) = queue.consume() {
-        let result = process_run(run);
-        let (mut map, mut status) = match result {
-            Ok(v) => (v, "success".to_string()),
-            Err(e) => (HashMap::new(), e.to_string()),
+        let map = match process_run(run) {
+            Ok(v) => v,
+            Err(e) => {
+                // process_run itself failed - create a status DataFrame with the error
+                let status_df = df![
+                    "status" => &["failed no status"],
+                    "parse_status" => &[Some(e.to_string())],
+                ]
+                .unwrap();
+                HashMap::from([(Intern::new("status"), status_df)])
+            }
         };
-
-        if map.contains_key("status") {
-            status = "Run emmitted a status table".to_string();
-            map = HashMap::new();
-        }
 
         for (key, mut val) in map.into_iter() {
             val.with_column(Series::new(
@@ -189,7 +216,7 @@ where
             for p in paths.iter() {
                 //should probably try not to clone on the last one
                 submitter
-                    .submit((p.to_string(), key.clone()), val.clone())
+                    .submit((Intern::new(*p), key), val.clone())
                     .unwrap();
             }
         }
@@ -213,9 +240,7 @@ fn main() {
     );
     main_progress.set_message("TodoStream...");
 
-
-
-    let queue = ToCollectQueue::new(config.to_collect(),main_progress);
+    let queue = ToCollectQueue::new(config.to_collect(), main_progress);
     std::thread::scope(|x| {
         let s = TableSubmitter::new(x, config.get_path().to_str().unwrap());
         for _ in 0..10 {
