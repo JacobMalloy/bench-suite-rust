@@ -193,5 +193,8 @@ impl<'de> Deserialize<'de> for Intern {
     }
 }
 
+impl Default for Intern {
+    fn default() -> Self {
+        Intern::from_static("default_intern")
     }
 }
