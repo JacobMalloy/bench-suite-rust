@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::fmt;
 use std::sync::{LazyLock, RwLock};
 
-use polars::prelude::*;
 use serde::de::{Deserialize, Deserializer, Visitor};
 
 static INTERNED: LazyLock<RwLock<HashSet<&'static str>>> =
@@ -194,68 +193,5 @@ impl<'de> Deserialize<'de> for Intern {
     }
 }
 
-// ============ Polars Integration ============
-
-// NOTE: NamedFrom impls for slices of Intern are in the consuming crate (bench-suite-types)
-// using wrapper types to satisfy the orphan rule.
-
-/// Extension trait for creating Series from Intern iterators
-pub trait InternSeriesExt {
-    fn from_interns(name: PlSmallStr, interns: impl IntoIterator<Item = Intern>) -> Series;
-}
-
-impl InternSeriesExt for Series {
-    fn from_interns(name: PlSmallStr, interns: impl IntoIterator<Item = Intern>) -> Series {
-        let strings: Vec<&'static str> = interns.into_iter().map(|i| i.0).collect();
-        StringChunked::from_slice(name, &strings).into_series()
     }
-}
-
-/// Extension trait for extracting Interns from a string Series
-pub trait InternChunkedExt {
-    fn to_interns(&self) -> Vec<Option<Intern>>;
-    fn to_interns_unwrap(&self) -> Vec<Intern>;
-}
-
-impl InternChunkedExt for StringChunked {
-    fn to_interns(&self) -> Vec<Option<Intern>> {
-        self.iter().map(|opt| opt.map(Intern::new)).collect()
-    }
-
-    fn to_interns_unwrap(&self) -> Vec<Intern> {
-        self.iter()
-            .map(|opt| Intern::new(opt.expect("unexpected null in string column")))
-            .collect()
-    }
-}
-
-/// Extension trait for Series to work with Interns
-pub trait SeriesInternExt {
-    fn to_interns(&self) -> PolarsResult<Vec<Option<Intern>>>;
-    fn to_interns_unwrap(&self) -> PolarsResult<Vec<Intern>>;
-}
-
-impl SeriesInternExt for Series {
-    fn to_interns(&self) -> PolarsResult<Vec<Option<Intern>>> {
-        Ok(self.str()?.to_interns())
-    }
-
-    fn to_interns_unwrap(&self) -> PolarsResult<Vec<Intern>> {
-        Ok(self.str()?.to_interns_unwrap())
-    }
-}
-
-/// Collect an iterator of Interns directly into a StringChunked
-impl FromIterator<Intern> for StringChunked {
-    fn from_iter<I: IntoIterator<Item = Intern>>(iter: I) -> Self {
-        let strings: Vec<&'static str> = iter.into_iter().map(|i| i.0).collect();
-        StringChunked::from_slice(PlSmallStr::EMPTY, &strings)
-    }
-}
-
-/// Helper to collect Option<Intern> iterators into StringChunked
-pub fn collect_optional_interns(iter: impl IntoIterator<Item = Option<Intern>>) -> StringChunked {
-    let strings: Vec<Option<&'static str>> =
-        iter.into_iter().map(|opt| opt.map(|i| i.0)).collect();
-    StringChunked::from_iter(strings)
 }
