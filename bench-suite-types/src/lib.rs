@@ -52,6 +52,7 @@ impl<T: ToSeriesColumn + Default> ToSeriesColumn for Option<T> {
 macro_rules! make_vectorized {
     ($original:ident, $vectorized:ident ,  { $($field:ident : $typ:ty),* $(,)? },
      optional:{$($opt_field:ident : $opt_typ:ty),* $(,)?}) => {
+        #[allow(non_snake_case)]
         #[derive(Debug, Clone, PartialEq,Deserialize)]
         #[serde(deny_unknown_fields)]
         pub struct $original {
@@ -59,6 +60,7 @@ macro_rules! make_vectorized {
             $(pub $opt_field: Option<$opt_typ>),*
         }
 
+        #[allow(non_snake_case)]
         #[derive(Debug, Clone,Deserialize)]
         pub struct $vectorized {
             $($field: Option<Vec<$typ>>),*,
@@ -129,6 +131,9 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     gc_logging:Intern,
     memory_ratio:f64,
     concgcthreads:u64,
+
+    GCThreadCPUs:Intern,
+    NonGCThreadCPUs:Intern,
 
 
     //dacapo
