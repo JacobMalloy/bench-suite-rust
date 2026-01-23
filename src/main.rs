@@ -65,23 +65,27 @@ fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: std::path:
         if let Some(v) = &mut data
             && v.estimated_size() >= 750 * 1024 * 1024
         {
-            ParquetWriter::new(File::create(format!("{}_{}.parquet", location.display(), index)).unwrap())
-                .with_compression(ParquetCompression::Zstd(Some(
-                    ZstdLevel::try_new(15).unwrap(),
-                )))
-                .finish(v)
-                .unwrap();
-            data = None;
-            index += 1;
-        }
-    }
-    if let Some(v) = &mut data {
-        ParquetWriter::new(File::create(format!("{}_{}.parquet", location.display(), index)).unwrap())
+            ParquetWriter::new(
+                File::create(format!("{}_{}.parquet", location.display(), index)).unwrap(),
+            )
             .with_compression(ParquetCompression::Zstd(Some(
                 ZstdLevel::try_new(15).unwrap(),
             )))
             .finish(v)
             .unwrap();
+            data = None;
+            index += 1;
+        }
+    }
+    if let Some(v) = &mut data {
+        ParquetWriter::new(
+            File::create(format!("{}_{}.parquet", location.display(), index)).unwrap(),
+        )
+        .with_compression(ParquetCompression::Zstd(Some(
+            ZstdLevel::try_new(15).unwrap(),
+        )))
+        .finish(v)
+        .unwrap();
     }
 }
 
@@ -174,10 +178,12 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<Intern, DataFrame>> {
     }
 
     // Get or create the status DataFrame, then add parse_status column
-    let status_df = return_map.entry(Intern::from_static("status")).or_insert_with(|| {
-        parsing_issues.push("no status file".to_string());
-        df!["status" => &["failed no status"]].unwrap()
-    });
+    let status_df = return_map
+        .entry(Intern::from_static("status"))
+        .or_insert_with(|| {
+            parsing_issues.push("no status file".to_string());
+            df!["status" => &["failed no status"]].unwrap()
+        });
 
     let parse_status: Option<String> = if parsing_issues.is_empty() {
         None

@@ -4,26 +4,26 @@ use lazy_read::{self, LazyRead};
 use polars::prelude::DataFrame;
 use std::io::Read;
 
-
 use string_intern::Intern;
 
-
-pub trait FileInfoInterface{
-    fn name(&self) -> &str; 
-    fn content_string(&mut self) -> Result<&str>; 
+pub trait FileInfoInterface {
+    fn name(&self) -> &str;
+    fn content_string(&mut self) -> Result<&str>;
     fn content_bytes(&mut self) -> Result<&[u8]>;
 }
 
-pub struct FileInfo<'a,T>
-where T:Read
+pub struct FileInfo<'a, T>
+where
+    T: Read,
 {
     content: lazy_read::LazyRead<T>,
     name: &'a str,
 }
 
-
-impl <'a,T>FileInfoInterface for FileInfo<'a,T>
-where T:Read{
+impl<'a, T> FileInfoInterface for FileInfo<'a, T>
+where
+    T: Read,
+{
     fn name(&self) -> &str {
         self.name
     }
@@ -51,7 +51,7 @@ where
     }
     pub fn name(&self) -> &str {
         self.name
-    } 
+    }
 }
 
 pub trait BenchSuiteCollect {
@@ -61,5 +61,5 @@ pub trait BenchSuiteCollect {
         file: &mut dyn FileInfoInterface,
     ) -> Result<()>;
 
-    fn get_result(self:Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, DataFrame)>>;
+    fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, DataFrame)>>;
 }

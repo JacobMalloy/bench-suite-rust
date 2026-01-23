@@ -6,9 +6,8 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use string_intern::Intern;
 
-static LATENCY_FILE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^dacapo-latency-usec-([a-zA-Z0-9-]+)-([0-9]+)\.csv$").unwrap()
-});
+static LATENCY_FILE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^dacapo-latency-usec-([a-zA-Z0-9-]+)-([0-9]+)\.csv$").unwrap());
 
 #[derive(Debug, Default)]
 pub struct BenchSuiteCollectDacapoLatency {

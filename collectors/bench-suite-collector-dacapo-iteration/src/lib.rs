@@ -5,9 +5,8 @@ use regex::Regex;
 use std::sync::LazyLock;
 use string_intern::Intern;
 
-static ITERATION_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"DaCapo.*in (\d+) msec").unwrap()
-});
+static ITERATION_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"DaCapo.*in (\d+) msec").unwrap());
 
 #[derive(Debug, Default)]
 pub struct BenchSuiteCollectDacapoIteration {

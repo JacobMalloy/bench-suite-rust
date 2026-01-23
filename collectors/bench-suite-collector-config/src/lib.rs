@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bench_suite_collect_results::{BenchSuiteCollect,FileInfoInterface};
+use bench_suite_collect_results::{BenchSuiteCollect, FileInfoInterface};
 use bench_suite_types::BenchSuiteRun;
 use polars::prelude::DataFrame;
 use string_intern::Intern;
@@ -7,9 +7,8 @@ use string_intern::Intern;
 #[derive(Default)]
 pub struct BenchSuiteCollectConfig {}
 
-
-impl BenchSuiteCollectConfig{
-    pub fn boxed()->Box<dyn BenchSuiteCollect>{
+impl BenchSuiteCollectConfig {
+    pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }
 }
@@ -23,7 +22,7 @@ impl BenchSuiteCollect for BenchSuiteCollectConfig {
         Ok(())
     }
 
-    fn get_result(self:Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, DataFrame)>> {
+    fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, DataFrame)>> {
         Ok(vec![(Intern::from_static("config"), config.to_df()?)])
     }
 }

@@ -6,7 +6,10 @@ use std::sync::LazyLock;
 use string_intern::Intern;
 
 static GC_PHASE_TIMES_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\[([^\]]*)\]\[info\s*\]\[gc,phases\s*\] GC\((\d+)\) ([YO]): ([A-Za-z \-]+) ([0-9.]+)ms").unwrap()
+    Regex::new(
+        r"\[([^\]]*)\]\[info\s*\]\[gc,phases\s*\] GC\((\d+)\) ([YO]): ([A-Za-z \-]+) ([0-9.]+)ms",
+    )
+    .unwrap()
 });
 
 #[derive(Debug, Default)]
