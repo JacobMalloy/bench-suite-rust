@@ -1,6 +1,9 @@
-use serde::Deserialize;
 use polars::prelude::*;
+use serde::Deserialize;
 use string_intern::Intern;
+
+use core::default::Default;
+use core::slice;
 
 // Trait to convert a single value to a Series column
 // This abstracts over different types so the macro can use a uniform interface
@@ -22,24 +25,25 @@ impl ToSeriesColumn for String {
 
 impl ToSeriesColumn for u64 {
     fn to_series_column(&self, name: PlSmallStr) -> Series {
-        Series::new(name, std::slice::from_ref(self))
+        UInt64Chunked::from_slice(name, slice::from_ref(self)).into_series()
     }
 }
 
 impl ToSeriesColumn for f64 {
     fn to_series_column(&self, name: PlSmallStr) -> Series {
-        Series::new(name, std::slice::from_ref(self))
+        Float64Chunked::from_slice(name, slice::from_ref(self)).into_series()
     }
 }
 
-impl<T: ToSeriesColumn> ToSeriesColumn for Option<T> {
+impl<T: ToSeriesColumn + Default> ToSeriesColumn for Option<T> {
     fn to_series_column(&self, name: PlSmallStr) -> Series {
         match self {
             Some(v) => v.to_series_column(name),
             None => {
                 // Need to determine the type for a null Series
                 // Use a single-element series with null
-                Series::new_null(name, 1)
+                let s = T::default().to_series_column("tmp".into());
+                Series::full_null(name, s.len(), s.dtype())
             }
         }
     }
@@ -49,7 +53,7 @@ macro_rules! make_vectorized {
     ($original:ident, $vectorized:ident ,  { $($field:ident : $typ:ty),* $(,)? },
      optional:{$($opt_field:ident : $opt_typ:ty),* $(,)?}) => {
         #[derive(Debug, Clone, PartialEq,Deserialize)]
-        #[serde(deny_unknown_fields)] 
+        #[serde(deny_unknown_fields)]
         pub struct $original {
             $(pub $field: $typ),*,
             $(pub $opt_field: Option<$opt_typ>),*
@@ -110,7 +114,7 @@ macro_rules! make_vectorized {
     };
 }
 
-make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{ 
+make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     benchmark:Intern,
     tar_file:String,
     iteration:u64,
@@ -125,7 +129,7 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     gc_logging:Intern,
     memory_ratio:f64,
     concgcthreads:u64,
-    
+
 
     //dacapo
     dacapo_benchmark:Intern,
@@ -140,6 +144,3 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 
 
 });
-
-
-
