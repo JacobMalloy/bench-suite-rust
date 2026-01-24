@@ -2,7 +2,7 @@
 members = ["bench-suite-benchmark-configs", "collectors/bench-suite-collector-time", "collectors/bench-suite-collector-dacapo-latency", "collectors/bench-suite-collector-dacapo-iteration", "collectors/bench-suite-collector-zgc-phases", "collectors/bench-suite-collector-threadstat", "collectors/bench-suite-collector-java-threads", "collectors/bench-suite-collector-status", "lazy-read", "string-intern"]
 
 [workspace.dependencies]
-polars = {version="0.x", default-features=false, features=["csv", "parquet"]}
+polars = {version="0.x", default-features=false, features=["csv", "parquet","performant"]}
 anyhow = "1.0.x"
 serde = { version = "1.0.x",features=["derive"]}
 serde_json = "1.0.x"
@@ -26,6 +26,7 @@ anyhow = {workspace = true}
 xz2 = "0.1.7"
 tar = {workspace = true}
 indicatif = "0.18.3"
+crossbeam = "0.8.4"
 
 [profile.release]
 lto = "thin"

@@ -167,7 +167,13 @@ version = "0.1.0"
 dependencies = [
  "bench-suite-collect-results",
  "bench-suite-collector-config",
+ "bench-suite-collector-dacapo-iteration",
+ "bench-suite-collector-dacapo-latency",
+ "bench-suite-collector-java-threads",
+ "bench-suite-collector-status",
+ "bench-suite-collector-threadstat",
  "bench-suite-collector-time",
+ "bench-suite-collector-zgc-phases",
 ]
 
 [[package]]
@@ -179,6 +185,7 @@ dependencies = [
  "bench-suite-collect-results",
  "bench-suite-config",
  "bench-suite-types",
+ "crossbeam",
  "indicatif",
  "polars",
  "string-intern",
@@ -552,6 +559,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "crossbeam"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-epoch",
+ "crossbeam-queue",
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -1576,8 +1596,10 @@ dependencies = [
  "polars-error",
  "polars-io",
  "polars-lazy",
+ "polars-ops",
  "polars-parquet",
  "polars-sql",
+ "polars-time",
  "polars-utils",
  "version_check",
 ]

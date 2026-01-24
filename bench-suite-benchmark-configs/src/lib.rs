@@ -1,6 +1,12 @@
 use bench_suite_collect_results::BenchSuiteCollect;
 use bench_suite_collector_config::BenchSuiteCollectConfig;
+use bench_suite_collector_dacapo_iteration::BenchSuiteCollectDacapoIteration;
+use bench_suite_collector_dacapo_latency::BenchSuiteCollectDacapoLatency;
+use bench_suite_collector_java_threads::BenchSuiteCollectJavaThreads;
+use bench_suite_collector_status::BenchSuiteCollectStatus;
+use bench_suite_collector_threadstat::BenchSuiteCollectThreadstat;
 use bench_suite_collector_time::BenchSuiteCollectTime;
+use bench_suite_collector_zgc_phases::BenchSuiteCollectZgcPhases;
 
 type Result<T> = std::result::Result<T, InvalidBenchmark>;
 
@@ -27,8 +33,16 @@ impl std::fmt::Display for InvalidBenchmark {
 
 impl std::error::Error for InvalidBenchmark {}
 
-const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 2] =
-    [BenchSuiteCollectConfig::boxed, BenchSuiteCollectTime::boxed];
+const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 8] = [
+    BenchSuiteCollectConfig::boxed,
+    BenchSuiteCollectTime::boxed,
+    BenchSuiteCollectDacapoIteration::boxed,
+    BenchSuiteCollectDacapoLatency::boxed,
+    BenchSuiteCollectJavaThreads::boxed,
+    BenchSuiteCollectStatus::boxed,
+    BenchSuiteCollectThreadstat::boxed,
+    BenchSuiteCollectZgcPhases::boxed,
+];
 
 pub fn get_collect_config(bench: &str) -> Result<&'static [fn() -> Box<dyn BenchSuiteCollect>]> {
     Ok(match bench {

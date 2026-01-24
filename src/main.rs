@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, anyhow};
+use crossbeam::channel;
 use polars::prelude::*;
 use std::collections::HashMap;
 use std::env;
@@ -7,6 +8,7 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::Mutex;
 use std::sync::mpsc;
+use std::thread;
 
 use string_intern::Intern;
 
@@ -42,50 +44,62 @@ where
     }
 }
 
+type ParquetSubmit = (String, DataFrame);
+
 #[derive(Clone)]
 struct TableSubmitter<'scope, 'env> {
-    source: Arc<Mutex<HashMap<(Intern, Intern), mpsc::Sender<DataFrame>>>>,
-    local: HashMap<(Intern, Intern), mpsc::Sender<DataFrame>>,
+    source: Arc<Mutex<HashMap<(Intern, Intern), mpsc::SyncSender<DataFrame>>>>,
+    local: HashMap<(Intern, Intern), mpsc::SyncSender<DataFrame>>,
     scope: &'scope std::thread::Scope<'scope, 'env>,
     base_location: &'scope str,
+    submit_queue: channel::Sender<ParquetSubmit>,
 }
 
-fn parquet_thread(rx: std::sync::mpsc::Receiver<DataFrame>, location: std::path::PathBuf) {
+fn parquet_thread(
+    rx: std::sync::mpsc::Receiver<DataFrame>,
+    location: std::path::PathBuf,
+    write_channel: channel::Sender<ParquetSubmit>,
+) {
     let mut index: u64 = 0;
     let mut data: Option<DataFrame> = None;
     while let Ok(msg) = rx.recv() {
-        match &data {
+        match &mut data {
             Some(v) => {
-                v.vstack(&msg).unwrap();
+                v.vstack_mut(&msg).unwrap();
             }
             None => {
                 data = Some(msg);
             }
         };
-        if let Some(v) = &mut data
-            && v.estimated_size() >= 750 * 1024 * 1024
-        {
-            ParquetWriter::new(
-                File::create(format!("{}_{}.parquet", location.display(), index)).unwrap(),
-            )
-            .with_compression(ParquetCompression::Zstd(Some(
-                ZstdLevel::try_new(15).unwrap(),
-            )))
-            .finish(v)
-            .unwrap();
-            data = None;
-            index += 1;
+
+        data = if let Some(mut df) = data.take() {
+            if df.estimated_size() >= 750 * 1024 * 1024 {
+                df.shrink_to_fit();
+                write_channel.send((format!("{}_{}.parquet", location.display(), index), df)).unwrap();
+                index += 1;
+                None
+            } else {
+                Some(df)
+            }
+        } else {
+            None
         }
     }
-    if let Some(v) = &mut data {
-        ParquetWriter::new(
-            File::create(format!("{}_{}.parquet", location.display(), index)).unwrap(),
-        )
-        .with_compression(ParquetCompression::Zstd(Some(
-            ZstdLevel::try_new(15).unwrap(),
-        )))
-        .finish(v)
-        .unwrap();
+    if let Some(mut df) = data {
+        df.shrink_to_fit();
+        write_channel.send((format!("{}_{}.parquet", location.display(), index), df)).unwrap();
+    }
+}
+
+fn parquet_write_thread(inputs: channel::Receiver<ParquetSubmit>) {
+    for (s, mut df) in inputs {
+        ParquetWriter::new(File::create(s).unwrap())
+            .with_compression(ParquetCompression::Zstd(Some(
+                ZstdLevel::try_new(9).unwrap(),
+            )))
+            .with_statistics(StatisticsOptions::default())
+            .finish(&mut df)
+            .unwrap();
     }
 }
 
@@ -103,11 +117,15 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
             locked
                 .entry(key)
                 .or_insert_with(|| {
-                    let (tx, rx) = mpsc::channel();
-                    scope.spawn(move || {
-                        let path = Path::new(base_location).join(key.0).join(key.1);
-                        parquet_thread(rx, path);
-                    });
+                    let (tx, rx) = mpsc::sync_channel(1);
+                    let submit = self.submit_queue.clone();
+                    thread::Builder::new()
+                        .name(format!("{}_{}", key.1, key.0))
+                        .spawn_scoped(scope, move || {
+                            let path = Path::new(base_location).join(key.0).join(key.1);
+                            parquet_thread(rx, path,submit);
+                        })
+                        .unwrap();
                     tx
                 })
                 .clone()
@@ -117,12 +135,14 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
     pub fn new(
         scope: &'scope std::thread::Scope<'scope, 'env>,
         base_location: &'scope str,
+        write_channel: channel::Sender<ParquetSubmit>,
     ) -> Self {
         Self {
             source: Arc::new(Mutex::new(HashMap::new())),
             local: HashMap::new(),
             scope,
             base_location,
+            submit_queue: write_channel,
         }
     }
 }
@@ -160,6 +180,8 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<Intern, DataFrame>> {
             }
         }
     }
+
+    drop(tarfile);
 
     let mut return_map: HashMap<Intern, DataFrame> = HashMap::new();
     for collector in collectors {
@@ -219,11 +241,13 @@ where
                 vec![id; val.height()],
             ))
             .unwrap();
-            for p in paths.iter() {
-                //should probably try not to clone on the last one
-                submitter
-                    .submit((Intern::new(*p), key), val.clone())
-                    .unwrap();
+            if let Some((last, remaining)) = paths.split_last() {
+                for p in remaining.iter() {
+                    submitter
+                        .submit((Intern::new(*p), key), val.clone())
+                        .unwrap();
+                }
+                submitter.submit((Intern::new(*last), key), val).unwrap();
             }
         }
     }
@@ -247,8 +271,16 @@ fn main() {
     main_progress.set_message("TodoStream...");
 
     let queue = ToCollectQueue::new(config.to_collect(), main_progress);
+
+    let (write_send, write_recieve) = channel::bounded(5);
+
     std::thread::scope(|x| {
-        let s = TableSubmitter::new(x, config.get_path().to_str().unwrap());
+        let s = TableSubmitter::new(x, config.get_path().to_str().unwrap(), write_send);
+        for i in 0..10 {
+            let tmp_recieve = write_recieve.clone();
+            thread::Builder::new().name(format!("writer-{i}")).spawn_scoped(x, 
+            || parquet_write_thread(tmp_recieve)).unwrap();
+        }
         for _ in 0..10 {
             let tmp_s = s.clone();
             x.spawn(|| {

@@ -1,6 +1,7 @@
 use anyhow::Context;
 use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
+use std::sync::LazyLock;
 use string_intern::Intern;
 
 #[derive(Debug, Default)]
@@ -13,6 +14,14 @@ impl BenchSuiteCollectThreadstat {
         Box::new(Self::default())
     }
 }
+
+static THREADSTAT_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
+    Arc::new(Schema::from_iter(vec![
+        Field::new("pid".into(), DataType::UInt32),
+        Field::new("event".into(), DataType::String),
+        Field::new("count".into(), DataType::UInt64),
+    ]))
+});
 
 impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
     fn process_file(
@@ -32,6 +41,7 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
 
         let df = CsvReadOptions::default()
             .with_has_header(true)
+            .with_schema(Some(THREADSTAT_SCHEMA.clone()))
             .into_reader_with_file_handle(cursor)
             .finish()
             .context("Failed to parse threadstat.csv")?;

@@ -6,4 +6,10 @@ edition = "2024"
 [dependencies]
 bench-suite-collector-config = {path = "../collectors/bench-suite-collector-config/"}
 bench-suite-collector-time = {path = "../collectors/bench-suite-collector-time/"}
+bench-suite-collector-dacapo-iteration = {path = "../collectors/bench-suite-collector-dacapo-iteration/"}
+bench-suite-collector-dacapo-latency = {path = "../collectors/bench-suite-collector-dacapo-latency/"}
+bench-suite-collector-zgc-phases = {path = "../collectors/bench-suite-collector-zgc-phases/"}
+bench-suite-collector-java-threads = {path = "../collectors/bench-suite-collector-java-threads/"}
+bench-suite-collector-status = {path = "../collectors/bench-suite-collector-status/"}
+bench-suite-collector-threadstat = {path = "../collectors/bench-suite-collector-threadstat/"}
 bench-suite-collect-results = {path = "../bench-suite-collect-results/"}

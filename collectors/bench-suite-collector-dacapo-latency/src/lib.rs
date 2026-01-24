@@ -9,6 +9,16 @@ use string_intern::Intern;
 static LATENCY_FILE_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^dacapo-latency-usec-([a-zA-Z0-9-]+)-([0-9]+)\.csv$").unwrap());
 
+static LATENCY_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
+    Arc::new(Schema::from_iter(vec![
+        Field::new("start_ns".into(), DataType::UInt64),
+        Field::new("end_ns".into(), DataType::UInt64),
+        Field::new("owner".into(), DataType::UInt64),
+    ]))
+});
+
+
+
 #[derive(Debug, Default)]
 pub struct BenchSuiteCollectDacapoLatency {
     latency_tables: HashMap<Intern, DataFrame>,
@@ -49,12 +59,18 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
 
         let mut df = CsvReadOptions::default()
             .with_has_header(false)
+            .with_schema(Some(LATENCY_SCHEMA.clone()))
             .into_reader_with_file_handle(cursor)
             .finish()
             .context("Failed to parse latency CSV")?;
 
         // Rename columns from default names to expected names
-        df.set_column_names(["start_ns", "end_ns", "owner"])?;
+
+        df.with_column(
+            (df.column("end_ns")? - df.column("start_ns")?)?.with_name("duration".into()),
+        )?;
+
+        df.drop_in_place("end_ns")?;
 
         // Add iteration column
         let row_count = df.height();
