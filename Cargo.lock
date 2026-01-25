@@ -307,9 +307,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bench-suite-run"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-config",
+]
+
+[[package]]
 name = "bench-suite-types"
 version = "0.1.0"
 dependencies = [
+ "custom-float",
  "polars",
  "serde",
  "string-intern",
@@ -625,6 +634,13 @@ checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
  "generic-array",
  "typenum",
+]
+
+[[package]]
+name = "custom-float"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
