@@ -7,3 +7,4 @@ edition = "2024"
 polars = {workspace = true}
 serde = { workspace = true}
 string-intern = { path = "../string-intern/"}
+custom-float = {path = "../custom-float/"}
