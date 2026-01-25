@@ -17,8 +17,6 @@ static LATENCY_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
     ]))
 });
 
-
-
 #[derive(Debug, Default)]
 pub struct BenchSuiteCollectDacapoLatency {
     latency_tables: HashMap<Intern, DataFrame>,
