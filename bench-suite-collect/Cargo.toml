@@ -1,0 +1,18 @@
+[package]
+name = "bench-suite-collect"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bench-suite-config = {path = "../bench-suite-config/"}
+bench-suite-types = {path = "../bench-suite-types/"}
+bench-suite-collect-results = {path = "../bench-suite-collect-results"}
+bench-suite-benchmark-configs = {path = "../bench-suite-benchmark-configs/"}
+string-intern = {path = "../string-intern/"}
+
+polars = {workspace = true}
+anyhow = {workspace = true}
+xz2 = "0.1.7"
+tar = {workspace = true}
+indicatif = "0.18.3"
+crossbeam = "0.8.4"

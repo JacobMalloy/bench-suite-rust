@@ -1,5 +1,9 @@
 [workspace]
-members = ["bench-suite-benchmark-configs", "collectors/bench-suite-collector-time", "collectors/bench-suite-collector-dacapo-latency", "collectors/bench-suite-collector-dacapo-iteration", "collectors/bench-suite-collector-zgc-phases", "collectors/bench-suite-collector-threadstat", "collectors/bench-suite-collector-java-threads", "collectors/bench-suite-collector-status", "lazy-read", "string-intern"]
+resolver = "3"
+members = [
+    "bench-suite-collect",
+    "bench-suite-run", "custom-float",
+]
 
 [workspace.dependencies]
 polars = {version="0.x", default-features=false, features=["csv", "parquet","performant"]}
@@ -7,26 +11,6 @@ anyhow = "1.0.x"
 serde = { version = "1.0.x",features=["derive"]}
 serde_json = "1.0.x"
 tar = "0.4.44"
-
-
-[package]
-name = "bench-suite-collect"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-bench-suite-config = {path = "./bench-suite-config/"}
-bench-suite-types = {path = "./bench-suite-types/"}
-bench-suite-collect-results = {path = "./bench-suite-collect-results"}
-bench-suite-benchmark-configs = {path = "./bench-suite-benchmark-configs/"}
-string-intern = {path = "./string-intern/"}
-
-polars = {workspace = true}
-anyhow = {workspace = true}
-xz2 = "0.1.7"
-tar = {workspace = true}
-indicatif = "0.18.3"
-crossbeam = "0.8.4"
 
 [profile.release]
 lto = "thin"

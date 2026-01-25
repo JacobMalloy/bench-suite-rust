@@ -75,7 +75,9 @@ fn parquet_thread(
         data = if let Some(mut df) = data.take() {
             if df.estimated_size() >= 750 * 1024 * 1024 {
                 df.shrink_to_fit();
-                write_channel.send((format!("{}_{}.parquet", location.display(), index), df)).unwrap();
+                write_channel
+                    .send((format!("{}_{}.parquet", location.display(), index), df))
+                    .unwrap();
                 index += 1;
                 None
             } else {
@@ -87,7 +89,9 @@ fn parquet_thread(
     }
     if let Some(mut df) = data {
         df.shrink_to_fit();
-        write_channel.send((format!("{}_{}.parquet", location.display(), index), df)).unwrap();
+        write_channel
+            .send((format!("{}_{}.parquet", location.display(), index), df))
+            .unwrap();
     }
 }
 
@@ -123,7 +127,7 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
                         .name(format!("{}_{}", key.1, key.0))
                         .spawn_scoped(scope, move || {
                             let path = Path::new(base_location).join(key.0).join(key.1);
-                            parquet_thread(rx, path,submit);
+                            parquet_thread(rx, path, submit);
                         })
                         .unwrap();
                     tx
@@ -278,8 +282,10 @@ fn main() {
         let s = TableSubmitter::new(x, config.get_path().to_str().unwrap(), write_send);
         for i in 0..10 {
             let tmp_recieve = write_recieve.clone();
-            thread::Builder::new().name(format!("writer-{i}")).spawn_scoped(x, 
-            || parquet_write_thread(tmp_recieve)).unwrap();
+            thread::Builder::new()
+                .name(format!("writer-{i}"))
+                .spawn_scoped(x, || parquet_write_thread(tmp_recieve))
+                .unwrap();
         }
         for _ in 0..10 {
             let tmp_s = s.clone();
