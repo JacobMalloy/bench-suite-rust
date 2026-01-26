@@ -180,7 +180,7 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<Intern, DataFrame>> {
 
         for i in collectors.iter_mut() {
             if let Err(e) = i.process_file(run, &mut file_info) {
-                parsing_issues.push(format!("process_file({}): {}", path, e));
+                parsing_issues.push(format!("process_file({}): {:?}", path, e));
             }
         }
     }
@@ -198,7 +198,7 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<Intern, DataFrame>> {
                 }
             }
             Err(e) => {
-                parsing_issues.push(format!("get_result: {}", e));
+                parsing_issues.push(format!("get_result: {:?}", e));
             }
         }
     }
@@ -232,7 +232,7 @@ where
                 // process_run itself failed - create a status DataFrame with the error
                 let status_df = df![
                     "status" => &["failed no status"],
-                    "parse_status" => &[Some(e.to_string())],
+                    "parse_status" => &[format!("{:?}",e)],
                 ]
                 .unwrap();
                 HashMap::from([(Intern::new("status"), status_df)])
