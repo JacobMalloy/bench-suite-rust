@@ -53,6 +53,10 @@ impl BenchSuiteTasks {
         })
     }
 
+    pub fn collection_names(&self) -> impl Iterator<Item = &str> {
+        self.collections.keys().map(|s| s.as_str())
+    }
+
     pub fn get_path(&self) -> &PathBuf {
         &self.location
     }

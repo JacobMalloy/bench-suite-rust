@@ -3,7 +3,7 @@ use crossbeam::channel;
 use polars::prelude::*;
 use std::collections::HashMap;
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::Mutex;
@@ -263,6 +263,17 @@ fn main() {
         .expect("You need to provide a an argument for the path");
 
     let config = BenchSuiteTasks::new(&config_file_path).unwrap();
+
+    // Delete existing collection directories and create fresh ones
+    let base_path = config.get_path();
+    for name in config.collection_names() {
+        let collection_path = base_path.join(name);
+        if collection_path.exists() {
+            fs::remove_dir_all(&collection_path)
+                .expect("Failed to delete existing collection directory");
+        }
+        fs::create_dir_all(&collection_path).expect("Failed to create collection directory");
+    }
 
     let progress = indicatif::MultiProgress::new();
     let main_progress = progress.add(indicatif::ProgressBar::new_spinner());
