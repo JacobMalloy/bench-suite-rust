@@ -61,7 +61,13 @@ impl BenchSuiteTasks {
         &self.location
     }
 
-    pub fn to_collect(&self) -> impl Iterator<Item = (u64, &BenchSuiteRun, Vec<&str>)> {
+    pub fn tar_file_path(&self, id: u64) -> PathBuf {
+        self.location
+            .join("runs")
+            .join(format!("{:012X}.tar.xz", id))
+    }
+
+    pub fn to_collect(&self) -> impl Iterator<Item = (u64, &BenchSuiteRun, Vec<&str>, PathBuf)> {
         self.runs.iter().filter_map(|(id, config)| {
             let tmp: HashSet<&str> = self
                 .collections
@@ -70,7 +76,8 @@ impl BenchSuiteTasks {
                     collect_vals.contains(config).then_some(location.as_str())
                 })
                 .collect();
-            (!tmp.is_empty()).then_some((*id, config, tmp.into_iter().collect()))
+            let tar_path = self.tar_file_path(*id);
+            (!tmp.is_empty()).then_some((*id, config, tmp.into_iter().collect(), tar_path))
         })
     }
 }

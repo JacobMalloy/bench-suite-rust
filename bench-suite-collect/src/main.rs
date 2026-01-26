@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::mpsc;
 use std::thread;
@@ -18,7 +18,7 @@ use bench_suite_types::BenchSuiteRun;
 
 struct ToCollectQueue<'a, T>
 where
-    T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
+    T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>, PathBuf)>,
 {
     it: Mutex<T>,
     pb: indicatif::ProgressBar,
@@ -26,7 +26,7 @@ where
 
 impl<'a, T> ToCollectQueue<'a, T>
 where
-    T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
+    T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>, PathBuf)>,
 {
     fn new(input: T, progress: indicatif::ProgressBar) -> Self {
         Self {
@@ -35,7 +35,7 @@ where
         }
     }
 
-    fn consume(&self) -> Option<(u64, &'a BenchSuiteRun, Vec<&'a str>)> {
+    fn consume(&self) -> Option<(u64, &'a BenchSuiteRun, Vec<&'a str>, PathBuf)> {
         let mut guard = self.it.lock().unwrap();
         let tmp = guard.next();
         self.pb.tick();
@@ -151,8 +151,8 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
     }
 }
 
-fn process_run(run: &BenchSuiteRun) -> Result<HashMap<Intern, DataFrame>> {
-    let tarfile = BufReader::new(File::open(&run.tar_file)?);
+fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, DataFrame>> {
+    let tarfile = BufReader::new(File::open(tar_path)?);
     let tarfile = xz2::read::XzDecoder::new(tarfile);
     let mut tarfile = tar::Archive::new(tarfile);
 
@@ -223,10 +223,10 @@ fn process_run(run: &BenchSuiteRun) -> Result<HashMap<Intern, DataFrame>> {
 
 fn process_thread<'a, T>(queue: &ToCollectQueue<'a, T>, mut submitter: TableSubmitter)
 where
-    T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>)>,
+    T: Iterator<Item = (u64, &'a BenchSuiteRun, Vec<&'a str>, PathBuf)>,
 {
-    while let Some((id, run, paths)) = queue.consume() {
-        let map = match process_run(run) {
+    while let Some((id, run, paths, tar_path)) = queue.consume() {
+        let map = match process_run(run, &tar_path) {
             Ok(v) => v,
             Err(e) => {
                 // process_run itself failed - create a status DataFrame with the error
