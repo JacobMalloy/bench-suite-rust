@@ -157,6 +157,7 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     jdk:Intern,
     process_count:NonZero<u64>,
     gc:Intern,
+    classpath:Intern,
 
     gc_logging:Intern,
     memory_ratio:PositiveNonZeroF64,
@@ -165,11 +166,20 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     GCThreadCPUs:Intern,
     NonGCThreadCPUs:Intern,
 
+    ResctrlIdleGCMask:NonZero<u64>,
+    ResctrlMarkingGCMask:NonZero<u64>,
+    ResctrlCollectingGCMask:NonZero<u64>,
+
+    ResctrlIdleAppMask:NonZero<u64>,
+    ResctrlMarkingAppMask:NonZero<u64>,
+    ResctrlCollectingAppMask:NonZero<u64>,
+
 
     //dacapo
     dacapo_benchmark:Intern,
     dacapo_location:Intern,
     dacapo_threads:NonZero<u64>,
+    dacapo_harness:Intern,
 
     //threadstat
     threadstat_location:Intern,
