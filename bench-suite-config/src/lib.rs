@@ -64,7 +64,7 @@ impl BenchSuiteTasks {
     pub fn tar_file_path(&self, id: u64) -> PathBuf {
         self.location
             .join("runs")
-            .join(format!("{:012X}.tar.xz", id))
+            .join(format!("{:016X}.tar.xz", id))
     }
 
     pub fn to_collect(&self) -> impl Iterator<Item = (u64, &BenchSuiteRun, Vec<&str>, PathBuf)> {
