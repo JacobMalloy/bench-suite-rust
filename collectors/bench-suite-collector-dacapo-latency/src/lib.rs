@@ -17,9 +17,9 @@ static LATENCY_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
     ]))
 });
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct BenchSuiteCollectDacapoLatency {
-    latency_tables: HashMap<Intern, DataFrame>,
+    latency_tables: HashMap<Intern, LazyFrame>,
 }
 
 impl BenchSuiteCollectDacapoLatency {
@@ -55,7 +55,7 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
 
         let cursor = std::io::Cursor::new(file.content_bytes()?);
 
-        let mut df = CsvReadOptions::default()
+        let df = CsvReadOptions::default()
             .with_has_header(false)
             .with_schema(Some(LATENCY_SCHEMA.clone()))
             .into_reader_with_file_handle(cursor)
@@ -63,26 +63,20 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
             .context("Failed to parse latency CSV")?;
 
         // Rename columns from default names to expected names
+        let lf = df.lazy().with_columns([(col("end_ns")-col("start_ns")).alias("duration"),lit(iteration).alias("iteration")]).
+            select([all().exclude_cols(["end_ns"]).as_expr()]);
+        
 
-        df.with_column(
-            (df.column("end_ns")? - df.column("start_ns")?)?.with_name("duration".into()),
-        )?;
-
-        df.drop_in_place("end_ns")?;
-
-        // Add iteration column
-        let row_count = df.height();
-        let iteration_col = Column::new("iteration".into(), vec![iteration; row_count]);
-        let _ = df.with_column(iteration_col)?;
 
         let table_name = Intern::new(format!("dacapo_latency_{}", file_type));
 
         match self.latency_tables.get_mut(&table_name) {
             Some(existing) => {
-                existing.vstack_mut(&df)?;
+                let old = core::mem::take(existing);
+                *existing = concat([old,lf],UnionArgs::default())?;
             }
             None => {
-                self.latency_tables.insert(table_name, df);
+                self.latency_tables.insert(table_name, lf);
             }
         }
 
@@ -92,7 +86,7 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
     fn get_result(
         self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
-    ) -> anyhow::Result<Vec<(Intern, DataFrame)>> {
+    ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         Ok(self.latency_tables.into_iter().collect())
     }
 }

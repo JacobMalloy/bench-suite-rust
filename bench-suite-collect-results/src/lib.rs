@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use bench_suite_types::BenchSuiteRun;
 use lazy_read::{self, LazyRead};
-use polars::prelude::DataFrame;
+use polars::prelude::LazyFrame;
 use std::io::Read;
 
 use string_intern::Intern;
@@ -61,5 +61,5 @@ pub trait BenchSuiteCollect {
         file: &mut dyn FileInfoInterface,
     ) -> Result<()>;
 
-    fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, DataFrame)>>;
+    fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, LazyFrame)>>;
 }

@@ -56,10 +56,10 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoIteration {
     fn get_result(
         self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
-    ) -> anyhow::Result<Vec<(Intern, DataFrame)>> {
+    ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
         if let Some(df) = self.iteration_df {
-            rv.push((Intern::from_static("iteration"), df));
+            rv.push((Intern::from_static("iteration"), df.lazy()));
         }
         Ok(rv)
     }

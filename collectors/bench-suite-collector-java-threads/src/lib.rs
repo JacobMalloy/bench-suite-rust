@@ -105,10 +105,10 @@ impl BenchSuiteCollect for BenchSuiteCollectJavaThreads {
     fn get_result(
         self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
-    ) -> anyhow::Result<Vec<(Intern, DataFrame)>> {
+    ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
         if let Some(df) = self.threads_df {
-            rv.push((Intern::from_static("java_threads"), df));
+            rv.push((Intern::from_static("java_threads"), df.lazy()));
         }
         Ok(rv)
     }

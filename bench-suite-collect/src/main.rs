@@ -6,8 +6,8 @@ use std::env;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::mpsc;
+use std::sync::{LazyLock, Mutex};
 use std::thread;
 
 use string_intern::Intern;
@@ -48,15 +48,15 @@ type ParquetSubmit = (String, DataFrame);
 
 #[derive(Clone)]
 struct TableSubmitter<'scope, 'env> {
-    source: Arc<Mutex<HashMap<(Intern, Intern), mpsc::SyncSender<DataFrame>>>>,
-    local: HashMap<(Intern, Intern), mpsc::SyncSender<DataFrame>>,
+    source: Arc<Mutex<HashMap<(Intern, Intern), mpsc::SyncSender<LazyFrame>>>>,
+    local: HashMap<(Intern, Intern), mpsc::SyncSender<LazyFrame>>,
     scope: &'scope std::thread::Scope<'scope, 'env>,
     base_location: &'scope str,
     submit_queue: channel::Sender<ParquetSubmit>,
 }
 
 fn parquet_thread(
-    rx: std::sync::mpsc::Receiver<DataFrame>,
+    rx: std::sync::mpsc::Receiver<LazyFrame>,
     location: std::path::PathBuf,
     write_channel: channel::Sender<ParquetSubmit>,
 ) {
@@ -65,16 +65,16 @@ fn parquet_thread(
     while let Ok(msg) = rx.recv() {
         match &mut data {
             Some(v) => {
-                v.vstack_mut(&msg).unwrap();
+                v.vstack(&msg.collect().unwrap()).unwrap();
             }
             None => {
-                data = Some(msg);
+                data = Some(msg.collect().unwrap());
             }
         };
 
-        data = if let Some(mut df) = data.take() {
+        data = if let Some(df) = data.take() {
             if df.estimated_size() >= 750 * 1024 * 1024 {
-                df.shrink_to_fit();
+                //df.shrink_to_fit();
                 write_channel
                     .send((format!("{}_{}.parquet", location.display(), index), df))
                     .unwrap();
@@ -87,13 +87,14 @@ fn parquet_thread(
             None
         }
     }
-    if let Some(mut df) = data {
-        df.shrink_to_fit();
+    if let Some(df) = data {
+        //df.shrink_to_fit();
         write_channel
             .send((format!("{}_{}.parquet", location.display(), index), df))
             .unwrap();
     }
 }
+
 
 fn parquet_write_thread(inputs: channel::Receiver<ParquetSubmit>) {
     for (s, mut df) in inputs {
@@ -111,8 +112,8 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
     pub fn submit(
         &mut self,
         key: (Intern, Intern),
-        value: DataFrame,
-    ) -> std::result::Result<(), std::sync::mpsc::SendError<DataFrame>> {
+        value: LazyFrame,
+    ) -> std::result::Result<(), Box<std::sync::mpsc::SendError<LazyFrame>>> {
         let base_location = self.base_location;
         let scope = self.scope;
         let source = &self.source;
@@ -134,7 +135,7 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
                 })
                 .clone()
         });
-        chan.send(value)
+        chan.send(value).map_err(Box::new)
     }
     pub fn new(
         scope: &'scope std::thread::Scope<'scope, 'env>,
@@ -151,7 +152,7 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
     }
 }
 
-fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, DataFrame>> {
+fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, LazyFrame>> {
     let tarfile = BufReader::new(File::open(tar_path)?);
     let tarfile = xz2::read::XzDecoder::new(tarfile);
     let mut tarfile = tar::Archive::new(tarfile);
@@ -187,7 +188,7 @@ fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, D
 
     drop(tarfile);
 
-    let mut return_map: HashMap<Intern, DataFrame> = HashMap::new();
+    let mut return_map: HashMap<Intern, LazyFrame> = HashMap::new();
     for collector in collectors {
         match BenchSuiteCollect::get_result(collector, run) {
             Ok(results) => {
@@ -203,20 +204,22 @@ fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, D
         }
     }
 
-    // Get or create the status DataFrame, then add parse_status column
+    // Get or create the status LazyFrame, then add parse_status column
     let status_df = return_map
         .entry(Intern::from_static("status"))
         .or_insert_with(|| {
             parsing_issues.push("no status file".to_string());
-            df!["status" => &["failed no status"]].unwrap()
+            df!["status" => &["failed no status"]].unwrap().lazy()
         });
 
-    let parse_status: Option<String> = if parsing_issues.is_empty() {
-        None
+    let parse_status = if parsing_issues.is_empty() {
+        lit(NULL).cast(DataType::String)
     } else {
-        Some(parsing_issues.join("; "))
-    };
-    status_df.with_column(Column::new("parse_status".into(), &[parse_status]))?;
+        lit(parsing_issues.join("; "))
+    }
+    .alias("parse_status");
+    let old = core::mem::take(status_df);
+    *status_df = old.with_column(parse_status).collect()?.lazy();
 
     Ok(return_map)
 }
@@ -229,22 +232,19 @@ where
         let map = match process_run(run, &tar_path) {
             Ok(v) => v,
             Err(e) => {
-                // process_run itself failed - create a status DataFrame with the error
+                // process_run itself failed - create a status LazyFrame with the error
                 let status_df = df![
                     "status" => &["failed no status"],
                     "parse_status" => &[format!("{:?}",e)],
                 ]
-                .unwrap();
+                .unwrap()
+                .lazy();
                 HashMap::from([(Intern::new("status"), status_df)])
             }
         };
 
         for (key, mut val) in map.into_iter() {
-            val.with_column(Series::new(
-                PlSmallStr::from_static("id"),
-                vec![id; val.height()],
-            ))
-            .unwrap();
+            val = val.with_column(lit(id).alias("id"));
             if let Some((last, remaining)) = paths.split_last() {
                 for p in remaining.iter() {
                     submitter

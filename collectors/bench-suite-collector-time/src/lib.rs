@@ -1,5 +1,5 @@
 use bench_suite_collect_results::BenchSuiteCollect;
-use polars::{frame::DataFrame, io::SerReader, prelude::CsvReader};
+use polars::prelude::*;
 use string_intern::Intern;
 
 #[derive(Debug, Default)]
@@ -36,11 +36,11 @@ impl BenchSuiteCollect for BenchSuiteCollectTime {
     fn get_result(
         self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
-    ) -> anyhow::Result<Vec<(Intern, polars::prelude::DataFrame)>> {
+    ) -> anyhow::Result<Vec<(Intern, polars::prelude::LazyFrame)>> {
         let mut rv = Vec::new();
         let BenchSuiteCollectTime { time_df } = *self;
         if let Some(v) = time_df {
-            rv.push((Intern::from_static("time"), v));
+            rv.push((Intern::from_static("time"), v.lazy()));
         }
         Ok(rv)
     }

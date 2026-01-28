@@ -4,9 +4,9 @@ use polars::prelude::*;
 use std::sync::LazyLock;
 use string_intern::Intern;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct BenchSuiteCollectThreadstat {
-    threadstat_df: Option<DataFrame>,
+    threadstat_df: Option<LazyFrame>,
 }
 
 impl BenchSuiteCollectThreadstat {
@@ -39,7 +39,7 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
 
         let cursor = std::io::Cursor::new(file.content_bytes()?);
 
-        let mut df = CsvReadOptions::default()
+        let df = CsvReadOptions::default()
             .with_has_header(true)
             .with_schema(Some(THREADSTAT_SCHEMA.clone()))
             .into_reader_with_file_handle(cursor)
@@ -50,13 +50,12 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
         //the reason for this is that threadstat outputs -1 when it fails to read the 
         //file descriptor. I believe this would happen when we try to open the perf event after
         //the process has closed. So right now I drop those columns and cast our column to unsigned
-        df = df
+        let lf = df
             .lazy()
             .filter(col("count").neq(lit(-1)))
-            .with_column(col("count").cast(DataType::UInt32))
-            .collect()?;
+            .with_column(col("count").cast(DataType::UInt32));
 
-        self.threadstat_df = Some(df);
+        self.threadstat_df = Some(lf);
 
         Ok(())
     }
@@ -64,10 +63,10 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
     fn get_result(
         self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
-    ) -> anyhow::Result<Vec<(Intern, DataFrame)>> {
+    ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
-        if let Some(df) = self.threadstat_df {
-            rv.push((Intern::from_static("threadstat"), df));
+        if let Some(lf) = self.threadstat_df {
+            rv.push((Intern::from_static("threadstat"), lf));
         }
         Ok(rv)
     }

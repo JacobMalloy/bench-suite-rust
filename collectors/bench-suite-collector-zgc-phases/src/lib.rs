@@ -92,10 +92,10 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcPhases {
     fn get_result(
         self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
-    ) -> anyhow::Result<Vec<(Intern, DataFrame)>> {
+    ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
         if let Some(df) = self.phases_df {
-            rv.push((Intern::from_static("zgc_phases"), df));
+            rv.push((Intern::from_static("zgc_phases"), df.lazy()));
         }
         Ok(rv)
     }

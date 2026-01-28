@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bench_suite_collect_results::{BenchSuiteCollect, FileInfoInterface};
 use bench_suite_types::BenchSuiteRun;
-use polars::prelude::DataFrame;
+use polars::prelude::*;
 use string_intern::Intern;
 
 #[derive(Default)]
@@ -22,7 +22,7 @@ impl BenchSuiteCollect for BenchSuiteCollectConfig {
         Ok(())
     }
 
-    fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, DataFrame)>> {
-        Ok(vec![(Intern::from_static("config"), config.to_df()?)])
+    fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, LazyFrame)>> {
+        Ok(vec![(Intern::from_static("config"), config.to_df()?.lazy())])
     }
 }
