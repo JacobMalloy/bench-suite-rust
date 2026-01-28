@@ -19,7 +19,7 @@ static THREADSTAT_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
     Arc::new(Schema::from_iter(vec![
         Field::new("pid".into(), DataType::UInt32),
         Field::new("event".into(), DataType::String),
-        Field::new("count".into(), DataType::UInt64),
+        Field::new("count".into(), DataType::Int64),
     ]))
 });
 
@@ -39,12 +39,22 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
 
         let cursor = std::io::Cursor::new(file.content_bytes()?);
 
-        let df = CsvReadOptions::default()
+        let mut df = CsvReadOptions::default()
             .with_has_header(true)
             .with_schema(Some(THREADSTAT_SCHEMA.clone()))
             .into_reader_with_file_handle(cursor)
             .finish()
             .context("Failed to parse threadstat.csv")?;
+        
+        //The count should be unsigned, but as seen in the schema above it is not
+        //the reason for this is that threadstat outputs -1 when it fails to read the 
+        //file descriptor. I believe this would happen when we try to open the perf event after
+        //the process has closed. So right now I drop those columns and cast our column to unsigned
+        df = df
+            .lazy()
+            .filter(col("count").neq(lit(-1)))
+            .with_column(col("count").cast(DataType::UInt32))
+            .collect()?;
 
         self.threadstat_df = Some(df);
 
