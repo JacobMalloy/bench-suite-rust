@@ -6,8 +6,7 @@ use std::env;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::sync::Mutex;
+use std::sync::{Mutex,mpsc};
 use std::thread;
 
 use string_intern::Intern;
@@ -65,16 +64,16 @@ fn parquet_thread(
     while let Ok(msg) = rx.recv() {
         match &mut data {
             Some(v) => {
-                v.vstack(&msg.collect().unwrap()).unwrap();
+                v.vstack_mut(&msg.collect().unwrap()).unwrap();
             }
             None => {
                 data = Some(msg.collect().unwrap());
             }
         };
 
-        data = if let Some(df) = data.take() {
+        data = if let Some(mut df) = data.take() {
             if df.estimated_size() >= 750 * 1024 * 1024 {
-                //df.shrink_to_fit();
+                df.shrink_to_fit();
                 write_channel
                     .send((format!("{}_{}.parquet", location.display(), index), df))
                     .unwrap();
@@ -87,14 +86,13 @@ fn parquet_thread(
             None
         }
     }
-    if let Some(df) = data {
-        //df.shrink_to_fit();
+    if let Some(mut df) = data {
+        df.shrink_to_fit();
         write_channel
             .send((format!("{}_{}.parquet", location.display(), index), df))
             .unwrap();
     }
 }
-
 
 fn parquet_write_thread(inputs: channel::Receiver<ParquetSubmit>) {
     for (s, mut df) in inputs {
