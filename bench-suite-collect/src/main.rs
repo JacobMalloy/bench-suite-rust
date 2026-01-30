@@ -7,7 +7,7 @@ use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::sync::{LazyLock, Mutex};
+use std::sync::Mutex;
 use std::thread;
 
 use string_intern::Intern;
@@ -204,22 +204,13 @@ fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, L
         }
     }
 
-    // Get or create the status LazyFrame, then add parse_status column
-    let status_df = return_map
-        .entry(Intern::from_static("status"))
-        .or_insert_with(|| {
-            parsing_issues.push("no status file".to_string());
-            df!["status" => &["failed no status"]].unwrap().lazy()
-        });
-
-    let parse_status = if parsing_issues.is_empty() {
-        lit(NULL).cast(DataType::String)
-    } else {
-        lit(parsing_issues.join("; "))
+    // Create parse_status table with one entry per error
+    if !parsing_issues.is_empty() {
+        let parse_status_df = df![
+            "message" => &parsing_issues,
+        ]?;
+        return_map.insert(Intern::from_static("parse_status"), parse_status_df.lazy());
     }
-    .alias("parse_status");
-    let old = core::mem::take(status_df);
-    *status_df = old.with_column(parse_status).collect()?.lazy();
 
     Ok(return_map)
 }
@@ -232,14 +223,12 @@ where
         let map = match process_run(run, &tar_path) {
             Ok(v) => v,
             Err(e) => {
-                // process_run itself failed - create a status LazyFrame with the error
-                let status_df = df![
-                    "status" => &["failed no status"],
-                    "parse_status" => &[format!("{:?}",e)],
+                // process_run itself failed
+                let parse_status_df = df![
+                    "message" => &[format!("{:?}", e)],
                 ]
-                .unwrap()
-                .lazy();
-                HashMap::from([(Intern::new("status"), status_df)])
+                .unwrap();
+                HashMap::from([(Intern::new("parse_status"), parse_status_df.lazy())])
             }
         };
 
