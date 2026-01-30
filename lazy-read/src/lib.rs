@@ -1,3 +1,5 @@
+pub mod error;
+use error::Result;
 use std::io::Read;
 use std::mem;
 pub enum LazyRead<T>
@@ -8,37 +10,6 @@ where
     String(String),
     Bytes(Vec<u8>),
 }
-
-#[derive(Debug)]
-pub enum Error {
-    IO(std::io::Error),
-    UTF8(std::string::FromUtf8Error),
-}
-
-impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::IO(i) => write!(f, "IO Error:{}", i),
-            Error::UTF8(i) => write!(f, "IO Error:{}", i),
-        }
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self {
-        Self::IO(value)
-    }
-}
-
-impl From<std::string::FromUtf8Error> for Error {
-    fn from(value: std::string::FromUtf8Error) -> Self {
-        Self::UTF8(value)
-    }
-}
-
-type Result<T> = std::result::Result<T, Error>;
 
 impl<T> LazyRead<T>
 where
