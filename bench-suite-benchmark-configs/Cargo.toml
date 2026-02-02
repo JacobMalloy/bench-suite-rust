@@ -12,4 +12,5 @@ bench-suite-collector-zgc-phases = {path = "../collectors/bench-suite-collector-
 bench-suite-collector-java-threads = {path = "../collectors/bench-suite-collector-java-threads/"}
 bench-suite-collector-status = {path = "../collectors/bench-suite-collector-status/"}
 bench-suite-collector-threadstat = {path = "../collectors/bench-suite-collector-threadstat/"}
+bench-suite-collector-system-load = {path = "../collectors/bench-suite-collector-system-load/"}
 bench-suite-collect-results = {path = "../bench-suite-collect-results/"}
