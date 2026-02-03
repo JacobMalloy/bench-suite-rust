@@ -3,7 +3,7 @@ resolver = "3"
 members = [
     "bench-suite-collect",
     "bench-suite-run"
-]
+, "polars-helpers"]
 
 [workspace.dependencies]
 polars = {version="0.x", default-features=false, features=["csv", "parquet","performant","lazy"]}

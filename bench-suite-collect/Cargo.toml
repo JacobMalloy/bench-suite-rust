@@ -9,6 +9,7 @@ bench-suite-types = {path = "../bench-suite-types/"}
 bench-suite-collect-results = {path = "../bench-suite-collect-results"}
 bench-suite-benchmark-configs = {path = "../bench-suite-benchmark-configs/"}
 string-intern = {path = "../string-intern/"}
+polars-helpers = {path = "../polars-helpers/"}
 
 polars = {workspace = true}
 anyhow = {workspace = true}

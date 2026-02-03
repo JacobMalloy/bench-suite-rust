@@ -73,7 +73,7 @@ fn parquet_thread(
 
         data = if let Some(mut df) = data.take() {
             if df.estimated_size() >= 750 * 1024 * 1024 {
-                df.shrink_to_fit();
+                df = polars_helpers::shrink_int_columns(df).unwrap();
                 write_channel
                     .send((format!("{}_{}.parquet", location.display(), index), df))
                     .unwrap();
@@ -87,7 +87,7 @@ fn parquet_thread(
         }
     }
     if let Some(mut df) = data {
-        df.shrink_to_fit();
+        df = polars_helpers::shrink_int_columns(df).unwrap();
         write_channel
             .send((format!("{}_{}.parquet", location.display(), index), df))
             .unwrap();

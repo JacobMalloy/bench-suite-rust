@@ -202,6 +202,7 @@ dependencies = [
  "crossbeam",
  "indicatif",
  "polars",
+ "polars-helpers",
  "string-intern",
  "tar",
  "xz2",
@@ -1818,6 +1819,13 @@ dependencies = [
  "recursive",
  "regex",
  "version_check",
+]
+
+[[package]]
+name = "polars-helpers"
+version = "0.1.0"
+dependencies = [
+ "polars",
 ]
 
 [[package]]
