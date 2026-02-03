@@ -98,7 +98,7 @@ fn parquet_write_thread(inputs: channel::Receiver<ParquetSubmit>) {
     for (s, mut df) in inputs {
         ParquetWriter::new(File::create(s).unwrap())
             .with_compression(ParquetCompression::Zstd(Some(
-                ZstdLevel::try_new(9).unwrap(),
+                ZstdLevel::try_new(14).unwrap(),
             )))
             .with_statistics(StatisticsOptions::default())
             .finish(&mut df)
@@ -278,14 +278,14 @@ fn main() {
 
     std::thread::scope(|x| {
         let s = TableSubmitter::new(x, config.get_path().to_str().unwrap(), write_send);
-        for i in 0..10 {
+        for i in 0..16 {
             let tmp_recieve = write_recieve.clone();
             thread::Builder::new()
                 .name(format!("writer-{i}"))
                 .spawn_scoped(x, || parquet_write_thread(tmp_recieve))
                 .unwrap();
         }
-        for _ in 0..10 {
+        for _ in 0..16 {
             let tmp_s = s.clone();
             x.spawn(|| {
                 process_thread(&queue, tmp_s);
