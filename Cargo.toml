@@ -14,4 +14,3 @@ tar = "0.4"
 
 [profile.release]
 lto = "thin"
-codegen-units = 1
