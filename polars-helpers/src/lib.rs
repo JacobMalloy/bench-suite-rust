@@ -4,7 +4,7 @@ use polars::prelude::*;
 pub fn shrink_int_columns(df: DataFrame) -> PolarsResult<DataFrame> {
     let mut columns = Vec::new();
     
-    for series in df.get_columns() {
+    for series in df.take_columns() {
         let shrunk = match series.dtype() {
             DataType::Int64 => {
                 let ca = series.i64()?;
@@ -31,7 +31,7 @@ pub fn shrink_int_columns(df: DataFrame) -> PolarsResult<DataFrame> {
                     } else if min >= i32::MIN as i64 && max <= i32::MAX as i64 {
                         series.cast(&DataType::Int32)?
                     } else {
-                        series.clone()
+                        series
                     }
                 }
             },
@@ -46,10 +46,10 @@ pub fn shrink_int_columns(df: DataFrame) -> PolarsResult<DataFrame> {
                 } else if max <= u32::MAX as u64 {
                     series.cast(&DataType::UInt32)?
                 } else {
-                    series.clone()
+                    series
                 }
             },
-            _ => series.clone(),
+            _ => series,
         };
         columns.push(shrunk);
     }
