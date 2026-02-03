@@ -51,7 +51,7 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
                         },
                         lit("raise"),
                     ),
-            )
+            ).rename(["%idle[...]"],["%idle"],false)
             .select([
                 col("timestamp"),
                 col("CPU"),
