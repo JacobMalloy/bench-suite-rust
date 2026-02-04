@@ -1,11 +1,12 @@
 use anyhow::Context;
 use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
+use std::collections::HashMap;
 use string_intern::Intern;
 
 #[derive(Default)]
 pub struct BenchSuiteCollectSystemLoad {
-    data_lf: Option<LazyFrame>,
+    tables: HashMap<Intern, LazyFrame>,
 }
 
 impl BenchSuiteCollectSystemLoad {
@@ -14,56 +15,57 @@ impl BenchSuiteCollectSystemLoad {
     }
 }
 
+fn transform_sadf(lf: LazyFrame) -> LazyFrame {
+    lf.with_column(
+        col("timestamp")
+            .str()
+            .to_datetime(
+                Some(TimeUnit::Milliseconds),
+                Some(TimeZone::UTC),
+                StrptimeOptions {
+                    format: Some("%Y-%m-%d %H:%M:%S".into()),
+                    exact: false,
+                    ..Default::default()
+                },
+                lit("raise"),
+            ),
+    )
+    .select([all().exclude_cols(["hostname", "interval"]).as_expr()])
+}
+
 impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
     fn process_file(
         &mut self,
         _: &bench_suite_types::BenchSuiteRun,
         file: &mut dyn bench_suite_collect_results::FileInfoInterface,
     ) -> anyhow::Result<()> {
-        if file.name() != "cpu_data.csv" {
+        let (table_name, parse_options) = if file.name() == "cpu_data.csv" {
+            (Intern::from_static("cpu_sadf"), CsvParseOptions::default())
+        } else if let Some(stem) = file.name().strip_suffix(".sadf") {
+            let tmp_name = format!("{stem}_sadf");
+            (Intern::new(tmp_name), CsvParseOptions::default().with_separator(b';'))
+        } else {
             return Ok(());
+        };
+
+        if self.tables.contains_key(&table_name) {
+            return Err(anyhow::anyhow!("Duplicate {} files", file.name()));
         }
 
-        if self.data_lf.is_some() {
-            return Err(anyhow::anyhow!("Duplicate cpu_data.csv files"));
-        }
+        let bytes = file.content_bytes()?;
+        // sadf -d header line starts with "# ", strip it so Polars reads it as a normal header
+        let bytes = bytes.strip_prefix(b"# ").unwrap_or(bytes);
 
-        let cursor = std::io::Cursor::new(file.content_bytes()?);
+        let cursor = std::io::Cursor::new(bytes);
 
         let df = CsvReadOptions::default()
             .with_has_header(true)
+            .with_parse_options(parse_options)
             .into_reader_with_file_handle(cursor)
             .finish()
-            .context("Failed to parse cpu_data.csv")?;
+            .with_context(|| format!("Failed to parse {}", file.name()))?;
 
-        let lf = df
-            .lazy()
-            .with_column(
-                col("timestamp")
-                    .str()
-                    .to_datetime(
-                        Some(TimeUnit::Milliseconds),
-                        Some(TimeZone::UTC),
-                        StrptimeOptions {
-                            format: Some("%Y-%m-%d %H:%M:%S".into()),
-                            exact: false,
-                            ..Default::default()
-                        },
-                        lit("raise"),
-                    ),
-            ).rename(["%idle[...]"],["%idle"],false)
-            .select([
-                col("timestamp"),
-                col("CPU"),
-                col("%user"),
-                col("%nice"),
-                col("%system"),
-                col("%iowait"),
-                col("%steal"),
-                col("%idle"),
-            ]);
-
-        self.data_lf = Some(lf);
+        self.tables.insert(table_name, transform_sadf(df.lazy()).collect()?.lazy());
 
         Ok(())
     }
@@ -72,10 +74,6 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
         self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
-        let mut rv = Vec::new();
-        if let Some(lf) = self.data_lf {
-            rv.push((Intern::from_static("system_load"), lf));
-        }
-        Ok(rv)
+        Ok(self.tables.into_iter().collect())
     }
 }
