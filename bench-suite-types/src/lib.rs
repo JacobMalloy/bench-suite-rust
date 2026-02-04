@@ -83,7 +83,7 @@ macro_rules! make_vectorized {
     ($original:ident, $vectorized:ident ,  { $($field:ident : $typ:ty),* $(,)? },
      optional:{$($opt_field:ident : $opt_typ:ty),* $(,)?}) => {
         #[allow(non_snake_case)]
-        #[derive(Debug, Clone, PartialEq,Deserialize)]
+        #[derive(Debug, Clone, PartialEq,Deserialize,Hash)]
         #[serde(deny_unknown_fields)]
         pub struct $original {
             $(pub $field: $typ),*,

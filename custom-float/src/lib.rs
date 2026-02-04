@@ -9,7 +9,7 @@ use std::num::NonZeroU64;
 ///
 /// Internally stored as `NonZeroU64` for niche optimization,
 /// so `Option<PositiveNonZeroF64>` is the same size as `f64`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PositiveNonZeroF64(NonZeroU64);
 
 #[derive(Clone, Copy, Debug)]
