@@ -37,8 +37,10 @@ where
     fn consume(&self) -> Option<(u64, &'a BenchSuiteRun, Vec<&'a str>, PathBuf)> {
         let mut guard = self.it.lock().unwrap();
         let tmp = guard.next();
-        self.pb.tick();
-        self.pb.inc(1);
+        if tmp.is_some(){
+            self.pb.tick();
+            self.pb.inc(1);
+        }
         tmp
     }
 }
