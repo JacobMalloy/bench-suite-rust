@@ -65,7 +65,19 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
             .finish()
             .with_context(|| format!("Failed to parse {}", file.name()))?;
 
-        self.tables.insert(table_name, transform_sadf(df.lazy()).collect()?.lazy());
+        // Find %idle[...] column to rename lazily
+        let idle_col = df
+            .get_column_names_str()
+            .iter()
+            .find(|c| c.starts_with("%idle["))
+            .map(|s| s.to_string());
+
+        let mut lf = df.lazy();
+        if let Some(col_name) = idle_col {
+            lf = lf.rename([col_name], ["%idle"], true);
+        }
+
+        self.tables.insert(table_name, transform_sadf(lf).collect()?.lazy());
 
         Ok(())
     }
