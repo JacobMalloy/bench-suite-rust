@@ -5,7 +5,7 @@
         "debug.db":{
             "benchmark":["dacapo_samples2"],
             "timeout":[7200],
-            "jdk":["/home/jmalloy1/jdks/jdk-24/"]
+            "jdk":["/home/jmalloy1/jdks/pqos/"]
         }
     }
 }
