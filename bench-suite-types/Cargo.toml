@@ -4,7 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-polars = {workspace = true}
-serde = { workspace = true}
 string-intern = { path = "../string-intern/"}
 custom-float = {path = "../custom-float/"}
+
+
+polars = {workspace = true, optional=true}
+serde = { workspace = true, optional=true}
+
+
+[features]
+polars = ["dep:polars"]
+serde = ["dep:serde"]

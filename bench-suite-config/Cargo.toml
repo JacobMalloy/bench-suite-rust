@@ -8,4 +8,4 @@ anyhow = {workspace = true}
 serde = {workspace =  true}
 serde_json = {workspace = true}
 
-bench-suite-types = {path = "../bench-suite-types"}
+bench-suite-types = {path = "../bench-suite-types",features=["serde"]}

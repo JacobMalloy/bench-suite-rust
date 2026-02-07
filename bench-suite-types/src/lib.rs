@@ -1,89 +1,22 @@
-use core::slice;
+use core::num::NonZero;
 use custom_float::PositiveNonZeroF64;
+#[cfg(feature = "polars")]
 use polars::prelude::*;
+#[cfg(feature = "serde")]
 use serde::Deserialize;
 use string_intern::Intern;
 
-use core::num::NonZero;
-
-// Trait to convert a single value to a Series column
-// This abstracts over different types so the macro can use a uniform interface
-trait ToSeriesColumn {
-    fn to_series_column(&self, name: PlSmallStr) -> Series;
-    fn get_null(name: PlSmallStr) -> Series;
-}
-
-impl ToSeriesColumn for Intern {
-    fn to_series_column(&self, name: PlSmallStr) -> Series {
-        StringChunked::from_slice(name, &[self.as_str()]).into_series()
-    }
-    fn get_null(name: PlSmallStr) -> Series {
-        Series::full_null(name, 1, &DataType::String)
-    }
-}
-
-impl ToSeriesColumn for String {
-    fn to_series_column(&self, name: PlSmallStr) -> Series {
-        StringChunked::from_slice(name, &[self.as_str()]).into_series()
-    }
-    fn get_null(name: PlSmallStr) -> Series {
-        Series::full_null(name, 1, &DataType::String)
-    }
-}
-
-impl ToSeriesColumn for u64 {
-    fn to_series_column(&self, name: PlSmallStr) -> Series {
-        UInt64Chunked::from_slice(name, slice::from_ref(self)).into_series()
-    }
-    fn get_null(name: PlSmallStr) -> Series {
-        Series::full_null(name, 1, &DataType::UInt64)
-    }
-}
-
-impl ToSeriesColumn for f64 {
-    fn to_series_column(&self, name: PlSmallStr) -> Series {
-        Float64Chunked::from_slice(name, slice::from_ref(self)).into_series()
-    }
-    fn get_null(name: PlSmallStr) -> Series {
-        Series::full_null(name, 1, &DataType::Float64)
-    }
-}
-
-impl ToSeriesColumn for PositiveNonZeroF64 {
-    fn to_series_column(&self, name: PlSmallStr) -> Series {
-        Float64Chunked::from_slice(name, slice::from_ref(&self.get())).into_series()
-    }
-    fn get_null(name: PlSmallStr) -> Series {
-        Series::full_null(name, 1, &DataType::Float64)
-    }
-}
-
-impl ToSeriesColumn for NonZero<u64> {
-    fn to_series_column(&self, name: PlSmallStr) -> Series {
-        UInt64Chunked::from_slice(name, slice::from_ref(&self.get())).into_series()
-    }
-    fn get_null(name: PlSmallStr) -> Series {
-        Series::full_null(name, 1, &DataType::UInt64)
-    }
-}
-
-impl<T: ToSeriesColumn> ToSeriesColumn for Option<T> {
-    fn to_series_column(&self, name: PlSmallStr) -> Series {
-        match self {
-            Some(v) => v.to_series_column(name),
-            None => T::get_null(name),
-        }
-    }
-    fn get_null(name: PlSmallStr) -> Series {
-        T::get_null(name)
-    }
-}
+#[cfg(feature = "polars")]
+mod polars_support;
+#[cfg(feature = "polars")]
+use polars_support::ToSeriesColumn;
 
 macro_rules! make_vectorized {
     ($original:ident, $vectorized:ident ,  { $($field:ident : $typ:ty),* $(,)? },
      optional:{$($opt_field:ident : $opt_typ:ty),* $(,)?}) => {
         #[allow(non_snake_case)]
-        #[derive(Debug, Clone, PartialEq,Deserialize,Hash)]
+        #[cfg_attr(feature = "serde", derive(Deserialize))]
+        #[derive(Debug, Clone, PartialEq,Hash)]
         #[serde(deny_unknown_fields)]
         pub struct $original {
             $(pub $field: $typ),*,
@@ -91,7 +24,8 @@ macro_rules! make_vectorized {
         }
 
         #[allow(non_snake_case)]
-        #[derive(Debug, Clone,Deserialize)]
+        #[cfg_attr(feature = "serde", derive(Deserialize))]
+        #[derive(Debug, Clone)]
         pub struct $vectorized {
             $($field: Option<Vec<$typ>>),*,
             $($opt_field: Option<Vec<$opt_typ>>),*,
@@ -130,6 +64,7 @@ macro_rules! make_vectorized {
 
         }
 
+        #[cfg(feature="polars")]
         impl $original{
             pub fn to_df(&self)->Result<DataFrame,polars::error::PolarsError>{
                 let columns: Vec<Column> = vec![
