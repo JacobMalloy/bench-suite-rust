@@ -3,6 +3,7 @@ use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
 use std::collections::HashMap;
 use string_intern::Intern;
+use std::sync::LazyLock;
 
 #[derive(Default)]
 pub struct BenchSuiteCollectSystemLoad {
@@ -32,6 +33,26 @@ fn transform_sadf(lf: LazyFrame) -> LazyFrame {
     )
     .select([all().exclude_cols(["hostname", "interval"]).as_expr()])
 }
+
+impl BenchSuiteCollectSystemLoad{
+    fn drop_cols(&mut self,table:Intern,columns: impl IntoVec<PlSmallStr>){
+        if let Some(v) = self.tables.get_mut(&table){
+            let tmp = core::mem::take(v);
+            *v = tmp.select([all().exclude_cols(columns).as_expr()])
+        }
+    }
+}
+
+
+static DROP_VALS:LazyLock<Vec<(Intern,Vec<&'static str>)>> = LazyLock::new(||{
+    vec![
+        (Intern::from_static("cpu_all_cores_sadf"),vec!["%idle"]),
+        (Intern::from_static("cpu_sadf"),vec!["%idle"]),
+        (Intern::from_static("memory_sadf"),vec!["%memused","%commit"]),
+    ]
+});
+
+static ALL_CPU_NAME:LazyLock<Intern>= LazyLock::new(|| Intern::from_static("cpu_all_cores_sadf"));
 
 impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
     fn process_file(
@@ -83,9 +104,16 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
     }
 
     fn get_result(
-        self: Box<Self>,
+        mut self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
+        for (name,cols) in DROP_VALS.iter(){
+            self.drop_cols(*name, cols.iter().copied());
+        }
+        if let Some(v) = self.tables.get_mut(&ALL_CPU_NAME){
+            let tmp = core::mem::take(v);
+            *v = tmp.filter(col("CPU").neq(lit(-1)));
+        }
         Ok(self.tables.into_iter().collect())
     }
 }
