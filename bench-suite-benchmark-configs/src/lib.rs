@@ -46,9 +46,20 @@ const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 9] = [
     BenchSuiteCollectZgcPhases::boxed,
 ];
 
+const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 7] = [
+    BenchSuiteCollectConfig::boxed,
+    BenchSuiteCollectTime::boxed,
+    BenchSuiteCollectJavaThreads::boxed,
+    BenchSuiteCollectStatus::boxed,
+    BenchSuiteCollectSystemLoad::boxed,
+    BenchSuiteCollectThreadstat::boxed,
+    BenchSuiteCollectZgcPhases::boxed,
+];
+
 pub fn get_collect_config(bench: &str) -> Result<&'static [fn() -> Box<dyn BenchSuiteCollect>]> {
     Ok(match bench {
         "dacapo_samples2" => &DACAPO_SAMPLES2_CONFIG,
+        "mark_abuse" => &MARK_ABUSE_CONFIG,
         _ => return Err(InvalidBenchmark::new(bench.to_string())),
     })
 }
