@@ -2901,6 +2901,7 @@ checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
 [[package]]
 name = "string-intern"
 version = "0.1.0"
+source = "git+https://github.com/JacobMalloy/string-intern.git#f48bfd127d3e5ad70f79bc0b506aae7c15c7f237"
 dependencies = [
  "serde",
 ]

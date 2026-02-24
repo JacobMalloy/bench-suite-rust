@@ -9,6 +9,7 @@ members = [
 polars = {version="0.x", default-features=false, features=["csv", "parquet","performant","lazy"]}
 anyhow = "1.0.x"
 serde = { version = "1.0.x",features=["derive"]}
+string-intern = {git="https://github.com/JacobMalloy/string-intern.git"}
 serde_json = "1.0.x"
 tar = "0.4"
 

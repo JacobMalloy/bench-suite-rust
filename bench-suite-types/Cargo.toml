@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-string-intern = { path = "../string-intern/"}
+string-intern = {workspace = true, features=["serde"]}
 custom-float = {path = "../custom-float/"}
 
 
