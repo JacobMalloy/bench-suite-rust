@@ -53,7 +53,7 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
         let lf = df
             .lazy()
             .filter(col("count").neq(lit(-1)))
-            .with_column(col("count").cast(DataType::UInt32));
+            .with_column(col("count").cast(DataType::UInt64));
 
         self.threadstat_df = Some(lf);
 
