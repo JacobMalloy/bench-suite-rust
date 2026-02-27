@@ -8,11 +8,13 @@ use std::{
 };
 
 use bench_suite_types::{BenchSuiteConfig, BenchSuiteRun};
+use string_intern::Intern;
 
 pub struct BenchSuiteTasks {
     runs: HashMap<u64, BenchSuiteRun>,
     collections: HashMap<String, BenchSuiteConfig>,
     location: PathBuf,
+    drop_tables: HashSet<Intern>,
 }
 
 impl BenchSuiteTasks {
@@ -50,6 +52,7 @@ impl BenchSuiteTasks {
             runs: benchmark_runs,
             collections: task_config.collect,
             location: bench_suite_location.to_path_buf(),
+            drop_tables: task_config.drop_tables,
         })
     }
 
@@ -59,6 +62,10 @@ impl BenchSuiteTasks {
 
     pub fn get_path(&self) -> &PathBuf {
         &self.location
+    }
+
+    pub fn get_drop_tables(&self) -> &HashSet<Intern> {
+        &self.drop_tables
     }
 
     pub fn tar_file_path(&self, id: u64) -> PathBuf {
@@ -86,6 +93,8 @@ impl BenchSuiteTasks {
 struct BenchSuiteTaskConfig {
     location: String,
     collect: HashMap<String, BenchSuiteConfig>,
+    #[serde(default)]
+    drop_tables: HashSet<Intern>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -63,17 +63,20 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
             .context("Failed to parse latency CSV")?;
 
         // Rename columns from default names to expected names
-        let lf = df.lazy().with_columns([(col("end_ns")-col("start_ns")).alias("duration"),lit(iteration).alias("iteration")]).
-            select([all().exclude_cols(["end_ns"]).as_expr()]);
-        
-
+        let lf = df
+            .lazy()
+            .with_columns([
+                (col("end_ns") - col("start_ns")).alias("duration"),
+                lit(iteration).alias("iteration"),
+            ])
+            .select([all().exclude_cols(["end_ns"]).as_expr()]);
 
         let table_name = Intern::new(format!("dacapo_latency_{}", file_type));
 
         match self.latency_tables.get_mut(&table_name) {
             Some(existing) => {
                 let old = core::mem::take(existing);
-                *existing = concat([old,lf],UnionArgs::default())?;
+                *existing = concat([old, lf], UnionArgs::default())?;
             }
             None => {
                 self.latency_tables.insert(table_name, lf);

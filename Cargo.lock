@@ -330,6 +330,7 @@ dependencies = [
  "bench-suite-types",
  "serde",
  "serde_json",
+ "string-intern",
 ]
 
 [[package]]

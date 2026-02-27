@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use crossbeam::channel;
 use polars::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::BufReader;
@@ -54,6 +54,7 @@ struct TableSubmitter<'scope, 'env> {
     scope: &'scope std::thread::Scope<'scope, 'env>,
     base_location: &'scope str,
     submit_queue: channel::Sender<ParquetSubmit>,
+    drop_tables: &'scope HashSet<Intern>,
 }
 
 fn parquet_thread(
@@ -100,9 +101,10 @@ fn parquet_write_thread(inputs: channel::Receiver<ParquetSubmit>) {
     for (s, mut df) in inputs {
         ParquetWriter::new(File::create(s).unwrap())
             .with_compression(ParquetCompression::Zstd(Some(
-                ZstdLevel::try_new(14).unwrap(),
+                ZstdLevel::try_new(18).unwrap(),
             )))
             .with_statistics(StatisticsOptions::default())
+            .with_row_group_size(Some(1_000_000))
             .finish(&mut df)
             .unwrap();
     }
@@ -114,6 +116,9 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
         key: (Intern, Intern),
         value: LazyFrame,
     ) -> std::result::Result<(), Box<std::sync::mpsc::SendError<LazyFrame>>> {
+        if self.drop_tables.contains(&key.1) {
+            return Ok(());
+        }
         let base_location = self.base_location;
         let scope = self.scope;
         let source = &self.source;
@@ -141,6 +146,7 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
         scope: &'scope std::thread::Scope<'scope, 'env>,
         base_location: &'scope str,
         write_channel: channel::Sender<ParquetSubmit>,
+        drop_tables: &'scope HashSet<Intern>,
     ) -> Self {
         Self {
             source: Arc::new(Mutex::new(HashMap::new())),
@@ -148,6 +154,7 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
             scope,
             base_location,
             submit_queue: write_channel,
+            drop_tables,
         }
     }
 }
@@ -279,7 +286,7 @@ fn main() {
     let (write_send, write_recieve) = channel::bounded(5);
 
     std::thread::scope(|x| {
-        let s = TableSubmitter::new(x, config.get_path().to_str().unwrap(), write_send);
+        let s = TableSubmitter::new(x, config.get_path().to_str().unwrap(), write_send, config.get_drop_tables());
         for i in 0..16 {
             let tmp_recieve = write_recieve.clone();
             thread::Builder::new()
