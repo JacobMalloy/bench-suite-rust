@@ -8,6 +8,7 @@ use string_intern::Intern;
 pub struct BenchSuiteCollectStatus {
     status: Option<String>,
     runner_exits: HashMap<u32, i32>,
+    resctrl_failed: bool,
 }
 
 impl BenchSuiteCollectStatus {
@@ -29,6 +30,13 @@ impl BenchSuiteCollect for BenchSuiteCollectStatus {
                 return Err(anyhow::anyhow!("Duplicate status.txt files"));
             }
             self.status = Some(file.content_string()?.trim().to_string());
+            return Ok(());
+        }
+
+        if name == "jvm0.txt" {
+            if file.content_string()?.contains("Resctrl: Failed") {
+                self.resctrl_failed = true;
+            }
             return Ok(());
         }
 
@@ -65,6 +73,10 @@ impl BenchSuiteCollect for BenchSuiteCollectStatus {
                     status = format!("runner{} exited with code {}", runner_num, exit_code);
                     break;
                 }
+            }
+
+            if status.to_lowercase() == "success" && self.resctrl_failed {
+                status = "resctrl_failed".to_string();
             }
         }
         let df = df![
