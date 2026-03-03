@@ -75,7 +75,7 @@ macro_rules! make_vectorized {
                         self.$opt_field.to_series_column(stringify!($opt_field).into()).into(),
                     )*
                 ];
-                DataFrame::new(columns)
+                DataFrame::new(1,columns)
             }
         }
     };

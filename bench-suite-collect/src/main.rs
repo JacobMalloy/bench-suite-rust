@@ -8,6 +8,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex,mpsc};
 use std::thread;
+use polars::polars_utils::compression::ZstdLevel;
 
 use string_intern::Intern;
 

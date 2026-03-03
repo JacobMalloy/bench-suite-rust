@@ -88,8 +88,8 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
 
         // Find %idle[...] column to rename lazily
         let idle_col = df
-            .get_column_names_str()
-            .iter()
+            .get_column_names()
+            .into_iter()
             .find(|c| c.starts_with("%idle["))
             .map(|s| s.to_string());
 
