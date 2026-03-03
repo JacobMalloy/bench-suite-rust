@@ -7,7 +7,7 @@ use string_intern::Intern;
 
 static GC_PHASE_TIMES_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"\[([^\]]*)\]\[info\s*\]\[gc,phases\s*\] GC\((\d+)\) ([YO]): ([A-Za-z \-]+) ([0-9.]+)ms",
+        r"\[([^\]]*)\]\[info\s*\]\[gc,phases\s*\] GC\((\d+)\) ([YOyo]): ([A-Za-z \-]+) ([0-9.]+)ms",
     )
     .unwrap()
 });
@@ -47,6 +47,7 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcPhases {
 
         let mut clock_times: Vec<String> = Vec::new();
         let mut gc_numbers: Vec<u32> = Vec::new();
+        let mut phase_ages: Vec<String> = Vec::new();
         let mut phase_types: Vec<String> = Vec::new();
         let mut phase_names: Vec<String> = Vec::new();
         let mut phase_times_ms: Vec<f64> = Vec::new();
@@ -70,17 +71,20 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcPhases {
 
             clock_times.push(clock_time.to_string());
             gc_numbers.push(gc_number);
-            phase_types.push(phase_type.to_string());
+            let type_char = phase_type.chars().next().ok_or( anyhow::anyhow!("ZGC age does not have a single char"))?;
+            phase_types.push(if type_char.is_lowercase() {"minor"} else {"major"}.into());
+            phase_ages.push(type_char.to_lowercase().to_string());
             phase_names.push(phase_name.to_string());
             phase_times_ms.push(phase_time);
         }
 
         let df = df![
-            "gc_phase_clock_time" => clock_times,
-            "gc_phase_gc_number" => gc_numbers,
-            "gc_phase_type" => phase_types,
-            "gc_phase_name" => phase_names,
-            "gc_phase_time_ms" => phase_times_ms,
+            "clock_time" => clock_times,
+            "gc_number" => gc_numbers,
+            "age" => phase_ages,
+            "type"=>phase_types,
+            "name" => phase_names,
+            "time_ms" => phase_times_ms,
         ]
         .context("Failed to create phases DataFrame")?;
 
