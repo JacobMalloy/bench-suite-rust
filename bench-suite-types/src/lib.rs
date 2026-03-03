@@ -96,6 +96,9 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 
     gc_logging:Intern,
     memory_ratio:PositiveNonZeroF64,
+    memory_config:NonZero<u64>,
+    softmax:Intern,
+    softmax_ratio:PositiveNonZeroF64,
     concgcthreads:NonZero<u64>,
 
     GCThreadCPUs:Intern,
@@ -116,11 +119,22 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     dacapo_threads:NonZero<u64>,
     dacapo_harness:Intern,
 
+    //mark abuse
+    mark_abuse_location:Intern,
+    mark_abuse_cardinality:NonZero<u64>,
+    mark_abuse_keys:NonZero<u64>,
+    mark_abuse_iterations:NonZero<u64>,
+    mark_abuse_warmup:NonZero<u64>,
+    mark_abuse_graph_nodes:NonZero<u64>,
+    mark_abuse_edges_per_node:NonZero<u64>,
+
+
     //threadstat
     threadstat_location:Intern,
 
     //cos
     cos_config:Intern,
+    cache_ways:NonZero<u64>,
 
 
 });
