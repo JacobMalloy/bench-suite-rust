@@ -19,11 +19,30 @@ impl BenchSuiteCollectThreadstat {
 
 static THREADSTAT_EVENT_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
     Arc::new(Schema::from_iter(vec![
-        Field::new("pid".into(), DataType::UInt32),
-        Field::new("event".into(), DataType::String),
+        Field::new("read_id".into(), DataType::UInt64),
         Field::new("count".into(), DataType::Int64),
+        Field::new("event_id".into(), DataType::UInt64),
     ]))
 });
+
+static THREADSTAT_EVENT_DESCRIPTION_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
+    Arc::new(Schema::from_iter(vec![
+        Field::new("event_id".into(), DataType::UInt64),
+        Field::new("name".into(), DataType::String),
+        Field::new("pid".into(), DataType::UInt32),
+    ]))
+});
+
+static THREADSTAT_READ_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
+    Arc::new(Schema::from_iter(vec![
+        Field::new("read_id".into(), DataType::UInt64),
+        Field::new("timestamp".into(), DataType::Int64),
+        Field::new("time_running".into(), DataType::UInt64),
+        Field::new("time_enabled".into(), DataType::UInt64),
+    ]))
+});
+
+
 
 impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
     fn process_file(
@@ -68,6 +87,7 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
 
                 let df = CsvReadOptions::default()
                     .with_has_header(true)
+                    .with_schema(Some(THREADSTAT_EVENT_DESCRIPTION_SCHEMA.clone()))
                     .into_reader_with_file_handle(cursor)
                     .finish()
                     .context("Failed to parse threadstat-event-description.csv")?;
@@ -83,6 +103,7 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
 
                 let df = CsvReadOptions::default()
                     .with_has_header(true)
+                    .with_schema(Some(THREADSTAT_READ_SCHEMA.clone()))
                     .into_reader_with_file_handle(cursor)
                     .finish()
                     .context("Failed to parse threadstat-read.csv")?;
