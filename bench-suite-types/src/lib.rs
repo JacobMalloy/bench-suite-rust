@@ -131,6 +131,8 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 
     //threadstat
     threadstat_location:Intern,
+    threadstat_wrapper_location:Intern,
+    threadstat_event:Intern,
 
     //cos
     cos_config:Intern,
