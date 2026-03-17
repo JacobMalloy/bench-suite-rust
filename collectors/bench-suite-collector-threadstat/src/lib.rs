@@ -50,6 +50,9 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
         _: &bench_suite_types::BenchSuiteRun,
         file: &mut dyn bench_suite_collect_results::FileInfoInterface,
     ) -> anyhow::Result<()> {
+        if !file.name().starts_with("threadstat-"){
+            return Ok(()) 
+        }
         match file.name() {
             "threadstat-event.csv" => {
                 if self.threadstat_event_df.is_some() {
