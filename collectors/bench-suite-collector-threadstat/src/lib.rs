@@ -7,7 +7,7 @@ use string_intern::Intern;
 #[derive(Default)]
 pub struct BenchSuiteCollectThreadstat {
     threadstat_event_df: Option<LazyFrame>,
-    threadstat_event_description_df: Option<LazyFrame>,
+    threadstat_counter_description_df: Option<LazyFrame>,
     threadstat_read_df: Option<LazyFrame>,
 }
 
@@ -25,7 +25,7 @@ static THREADSTAT_EVENT_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
     ]))
 });
 
-static THREADSTAT_EVENT_DESCRIPTION_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
+static THREADSTAT_COUNTER_DESCRIPTION_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
     Arc::new(Schema::from_iter(vec![
         Field::new("event_id".into(), DataType::UInt64),
         Field::new("name".into(), DataType::String),
@@ -80,7 +80,7 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
                 self.threadstat_event_df = Some(lf);
             }
             "threadstat-event-description.csv" => {
-                if self.threadstat_event_description_df.is_some() {
+                if self.threadstat_counter_description_df.is_some() {
                     return Err(anyhow::anyhow!(
                         "Duplicate threadstat-event-description.csv files"
                     ));
@@ -90,12 +90,12 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
 
                 let df = CsvReadOptions::default()
                     .with_has_header(true)
-                    .with_schema(Some(THREADSTAT_EVENT_DESCRIPTION_SCHEMA.clone()))
+                    .with_schema(Some(THREADSTAT_COUNTER_DESCRIPTION_SCHEMA.clone()))
                     .into_reader_with_file_handle(cursor)
                     .finish()
                     .context("Failed to parse threadstat-event-description.csv")?;
 
-                self.threadstat_event_description_df = Some(df.lazy());
+                self.threadstat_counter_description_df = Some(df.lazy());
             }
             "threadstat-read.csv" => {
                 if self.threadstat_read_df.is_some() {
@@ -133,8 +133,8 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
         if let Some(lf) = self.threadstat_event_df {
             rv.push((Intern::from_static("threadstat_event"), lf));
         }
-        if let Some(lf) = self.threadstat_event_description_df {
-            rv.push((Intern::from_static("threadstat_event_description"), lf));
+        if let Some(lf) = self.threadstat_counter_description_df {
+            rv.push((Intern::from_static("threadstat_counter_description"), lf));
         }
         if let Some(lf) = self.threadstat_read_df {
             rv.push((Intern::from_static("threadstat_read"), lf));
