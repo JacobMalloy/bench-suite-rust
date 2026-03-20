@@ -2,9 +2,9 @@ use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
 use string_intern::Intern;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct BenchSuiteCollectTime {
-    time_df: Option<DataFrame>,
+    time_df: Option<LazyFrame>,
 }
 
 impl BenchSuiteCollectTime {
@@ -29,7 +29,14 @@ impl BenchSuiteCollect for BenchSuiteCollectTime {
 
         let cursor = std::io::Cursor::new(file.content_bytes()?);
 
-        self.time_df = Some(CsvReader::new(cursor).finish()?);
+        let lf = CsvReader::new(cursor).finish()?.lazy().with_column(
+            col("cpu_percent")
+                .str()
+                .strip_suffix(lit("%"))
+                .cast(DataType::UInt32),
+        );
+
+        self.time_df = Some(lf);
 
         Ok(())
     }
@@ -40,7 +47,7 @@ impl BenchSuiteCollect for BenchSuiteCollectTime {
         let mut rv = Vec::new();
         let BenchSuiteCollectTime { time_df } = *self;
         if let Some(v) = time_df {
-            rv.push((Intern::from_static("time"), v.lazy()));
+            rv.push((Intern::from_static("time"), v));
         }
         Ok(rv)
     }
