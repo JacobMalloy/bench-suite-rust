@@ -80,7 +80,7 @@ impl Display for PositiveNonZeroF64 {
 
 impl PartialOrd for PositiveNonZeroF64 {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.get().partial_cmp(&other.get())
+        Some(self.cmp(other))
     }
 }
 
