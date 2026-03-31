@@ -8,6 +8,7 @@ pub struct BenchSuiteCollectTime {
 }
 
 impl BenchSuiteCollectTime {
+    #[must_use]
     pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }

@@ -3,6 +3,9 @@ name = "bench-suite-types"
 version = "0.1.0"
 edition = "2024"
 
+[lints.clippy]
+pedantic = "warn"
+
 [dependencies]
 string-intern = {workspace = true, features=["serde"]}
 custom-float = {path = "../custom-float/"}

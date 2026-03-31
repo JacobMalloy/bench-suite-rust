@@ -4,9 +4,9 @@ use bench_suite_collector_dacapo_iteration::BenchSuiteCollectDacapoIteration;
 use bench_suite_collector_dacapo_latency::BenchSuiteCollectDacapoLatency;
 use bench_suite_collector_java_threads::BenchSuiteCollectJavaThreads;
 use bench_suite_collector_status::BenchSuiteCollectStatus;
+use bench_suite_collector_system_load::BenchSuiteCollectSystemLoad;
 use bench_suite_collector_threadstat::BenchSuiteCollectThreadstat;
 use bench_suite_collector_time::BenchSuiteCollectTime;
-use bench_suite_collector_system_load::BenchSuiteCollectSystemLoad;
 use bench_suite_collector_zgc_phases::BenchSuiteCollectZgcPhases;
 
 type Result<T> = std::result::Result<T, InvalidBenchmark>;
@@ -17,6 +17,7 @@ pub struct InvalidBenchmark {
 }
 
 impl InvalidBenchmark {
+    #[must_use]
     pub fn new(name: String) -> Self {
         Self { name }
     }
@@ -56,7 +57,13 @@ const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 7] = [
     BenchSuiteCollectZgcPhases::boxed,
 ];
 
-pub fn get_collect_config(bench: &str) -> Result<&'static [fn() -> Box<dyn BenchSuiteCollect>]> {
+type CreateCollectorFunction = fn() -> Box<dyn BenchSuiteCollect>;
+
+/// Get the Collect Config for a benchmark name
+///
+/// # Errors
+/// Returns `Err` if benchmark name does not have config
+pub fn get_collect_config(bench: &str) -> Result<&'static [CreateCollectorFunction]> {
     Ok(match bench {
         "dacapo_samples2" => &DACAPO_SAMPLES2_CONFIG,
         "mark_abuse" => &MARK_ABUSE_CONFIG,

@@ -2,8 +2,8 @@ use anyhow::Context;
 use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
 use std::collections::HashMap;
-use string_intern::Intern;
 use std::sync::LazyLock;
+use string_intern::Intern;
 
 #[derive(Default)]
 pub struct BenchSuiteCollectSystemLoad {
@@ -11,48 +11,47 @@ pub struct BenchSuiteCollectSystemLoad {
 }
 
 impl BenchSuiteCollectSystemLoad {
+    #[must_use]
     pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }
 }
 
 fn transform_sadf(lf: LazyFrame) -> LazyFrame {
-    lf.with_column(
-        col("timestamp")
-            .str()
-            .to_datetime(
-                Some(TimeUnit::Milliseconds),
-                Some(TimeZone::UTC),
-                StrptimeOptions {
-                    format: Some("%Y-%m-%d %H:%M:%S".into()),
-                    exact: false,
-                    ..Default::default()
-                },
-                lit("raise"),
-            ),
-    )
+    lf.with_column(col("timestamp").str().to_datetime(
+        Some(TimeUnit::Milliseconds),
+        Some(TimeZone::UTC),
+        StrptimeOptions {
+            format: Some("%Y-%m-%d %H:%M:%S".into()),
+            exact: false,
+            ..Default::default()
+        },
+        lit("raise"),
+    ))
     .select([all().exclude_cols(["hostname", "interval"]).as_expr()])
 }
 
-impl BenchSuiteCollectSystemLoad{
-    fn drop_cols(&mut self,table:Intern,columns: impl IntoVec<PlSmallStr>){
-        if let Some(v) = self.tables.get_mut(&table){
+impl BenchSuiteCollectSystemLoad {
+    fn drop_cols(&mut self, table: Intern, columns: impl IntoVec<PlSmallStr>) {
+        if let Some(v) = self.tables.get_mut(&table) {
             let tmp = core::mem::take(v);
-            *v = tmp.select([all().exclude_cols(columns).as_expr()])
+            *v = tmp.select([all().exclude_cols(columns).as_expr()]);
         }
     }
 }
 
-
-static DROP_VALS:LazyLock<Vec<(Intern,Vec<&'static str>)>> = LazyLock::new(||{
+static DROP_VALS: LazyLock<Vec<(Intern, Vec<&'static str>)>> = LazyLock::new(|| {
     vec![
-        (Intern::from_static("cpu_all_cores_sadf"),vec!["%idle"]),
-        (Intern::from_static("cpu_sadf"),vec!["%idle"]),
-        (Intern::from_static("memory_sadf"),vec!["%memused","%commit"]),
+        (Intern::from_static("cpu_all_cores_sadf"), vec!["%idle"]),
+        (Intern::from_static("cpu_sadf"), vec!["%idle"]),
+        (
+            Intern::from_static("memory_sadf"),
+            vec!["%memused", "%commit"],
+        ),
     ]
 });
 
-static ALL_CPU_NAME:LazyLock<Intern>= LazyLock::new(|| Intern::from_static("cpu_all_cores_sadf"));
+static ALL_CPU_NAME: LazyLock<Intern> = LazyLock::new(|| Intern::from_static("cpu_all_cores_sadf"));
 
 impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
     fn process_file(
@@ -64,7 +63,10 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
             (Intern::from_static("cpu_sadf"), CsvParseOptions::default())
         } else if let Some(stem) = file.name().strip_suffix(".sadf") {
             let tmp_name = format!("{stem}_sadf");
-            (Intern::new(tmp_name), CsvParseOptions::default().with_separator(b';'))
+            (
+                Intern::new(tmp_name),
+                CsvParseOptions::default().with_separator(b';'),
+            )
         } else {
             return Ok(());
         };
@@ -91,14 +93,15 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
             .get_column_names()
             .into_iter()
             .find(|c| c.starts_with("%idle["))
-            .map(|s| s.to_string());
+            .map(PlSmallStr::to_string);
 
         let mut lf = df.lazy();
         if let Some(col_name) = idle_col {
             lf = lf.rename([col_name], ["%idle"], true);
         }
 
-        self.tables.insert(table_name, transform_sadf(lf).collect()?.lazy());
+        self.tables
+            .insert(table_name, transform_sadf(lf).collect()?.lazy());
 
         Ok(())
     }
@@ -107,10 +110,10 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
         mut self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
-        for (name,cols) in DROP_VALS.iter(){
+        for (name, cols) in DROP_VALS.iter() {
             self.drop_cols(*name, cols.iter().copied());
         }
-        if let Some(v) = self.tables.get_mut(&ALL_CPU_NAME){
+        if let Some(v) = self.tables.get_mut(&ALL_CPU_NAME) {
             let tmp = core::mem::take(v);
             *v = tmp.filter(col("CPU").neq(lit(-1)));
         }

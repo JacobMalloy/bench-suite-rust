@@ -66,6 +66,11 @@ macro_rules! make_vectorized {
 
         #[cfg(feature="polars")]
         impl $original{
+            /// Converts this run config into a single-row Polars `DataFrame`.
+            ///
+            /// # Errors
+            ///
+            /// Returns `Err` if Polars fails to construct the `DataFrame` from the column series.
             pub fn to_df(&self)->Result<DataFrame,polars::error::PolarsError>{
                 let columns: Vec<Column> = vec![
                     $(

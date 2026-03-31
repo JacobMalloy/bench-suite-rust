@@ -12,6 +12,7 @@ pub struct BenchSuiteCollectStatus {
 }
 
 impl BenchSuiteCollectStatus {
+    #[must_use]
     pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }
@@ -70,7 +71,7 @@ impl BenchSuiteCollect for BenchSuiteCollectStatus {
             for &runner_num in &runner_nums {
                 let exit_code = self.runner_exits[runner_num];
                 if exit_code != 0 {
-                    status = format!("runner{} exited with code {}", runner_num, exit_code);
+                    status = format!("runner{runner_num} exited with code {exit_code}");
                     break;
                 }
             }

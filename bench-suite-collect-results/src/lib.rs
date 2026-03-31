@@ -8,7 +8,19 @@ use string_intern::Intern;
 
 pub trait FileInfoInterface {
     fn name(&self) -> &str;
+
+    /// Returns the file contents as a UTF-8 string.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if reading the file fails or if the contents are not valid UTF-8.
     fn content_string(&mut self) -> Result<&str>;
+
+    /// Returns the file contents as raw bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if reading the file fails.
     fn content_bytes(&mut self) -> Result<&[u8]>;
 }
 
@@ -20,7 +32,7 @@ where
     name: &'a str,
 }
 
-impl<'a, T> FileInfoInterface for FileInfo<'a, T>
+impl<T> FileInfoInterface for FileInfo<'_, T>
 where
     T: Read,
 {
@@ -55,11 +67,21 @@ where
 }
 
 pub trait BenchSuiteCollect {
+    /// Processes a single file from a benchmark run's archive.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the file is a duplicate, cannot be read, or fails to parse.
     fn process_file(
         &mut self,
         config: &BenchSuiteRun,
         file: &mut dyn FileInfoInterface,
     ) -> Result<()>;
 
+    /// Consumes the collector and returns the collected data as named `LazyFrame`s.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the collected data cannot be assembled into a `LazyFrame`.
     fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, LazyFrame)>>;
 }

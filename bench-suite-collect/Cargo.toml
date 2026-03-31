@@ -3,6 +3,9 @@ name = "bench-suite-collect"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 bench-suite-config = {path = "../bench-suite-config/"}
 bench-suite-types = {path = "../bench-suite-types/"}

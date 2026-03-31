@@ -6,12 +6,13 @@ use string_intern::Intern;
 
 #[derive(Default)]
 pub struct BenchSuiteCollectThreadstat {
-    threadstat_event_df: Option<LazyFrame>,
-    threadstat_counter_description_df: Option<LazyFrame>,
-    threadstat_read_df: Option<LazyFrame>,
+    event: Option<LazyFrame>,
+    counter_description: Option<LazyFrame>,
+    read: Option<LazyFrame>,
 }
 
 impl BenchSuiteCollectThreadstat {
+    #[must_use]
     pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }
@@ -42,20 +43,18 @@ static THREADSTAT_READ_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| {
     ]))
 });
 
-
-
 impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
     fn process_file(
         &mut self,
         _: &bench_suite_types::BenchSuiteRun,
         file: &mut dyn bench_suite_collect_results::FileInfoInterface,
     ) -> anyhow::Result<()> {
-        if !file.name().starts_with("threadstat-"){
-            return Ok(()) 
+        if !file.name().starts_with("threadstat-") {
+            return Ok(());
         }
         match file.name() {
             "threadstat-event.csv" => {
-                if self.threadstat_event_df.is_some() {
+                if self.event.is_some() {
                     return Err(anyhow::anyhow!("Duplicate threadstat-event.csv files"));
                 }
 
@@ -77,10 +76,10 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
                     .filter(col("count").neq(lit(-1)))
                     .with_column(col("count").cast(DataType::UInt64));
 
-                self.threadstat_event_df = Some(lf);
+                self.event = Some(lf);
             }
             "threadstat-event-description.csv" => {
-                if self.threadstat_counter_description_df.is_some() {
+                if self.counter_description.is_some() {
                     return Err(anyhow::anyhow!(
                         "Duplicate threadstat-event-description.csv files"
                     ));
@@ -95,10 +94,10 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
                     .finish()
                     .context("Failed to parse threadstat-event-description.csv")?;
 
-                self.threadstat_counter_description_df = Some(df.lazy());
+                self.counter_description = Some(df.lazy());
             }
             "threadstat-read.csv" => {
-                if self.threadstat_read_df.is_some() {
+                if self.read.is_some() {
                     return Err(anyhow::anyhow!("Duplicate threadstat-read.csv files"));
                 }
 
@@ -117,7 +116,7 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
                         .alias("timestamp"),
                 );
 
-                self.threadstat_read_df = Some(lf);
+                self.read = Some(lf);
             }
             _ => {}
         }
@@ -130,13 +129,13 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
         _: &bench_suite_types::BenchSuiteRun,
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
-        if let Some(lf) = self.threadstat_event_df {
+        if let Some(lf) = self.event {
             rv.push((Intern::from_static("threadstat_event"), lf));
         }
-        if let Some(lf) = self.threadstat_counter_description_df {
+        if let Some(lf) = self.counter_description {
             rv.push((Intern::from_static("threadstat_counter_description"), lf));
         }
-        if let Some(lf) = self.threadstat_read_df {
+        if let Some(lf) = self.read {
             rv.push((Intern::from_static("threadstat_read"), lf));
         }
         Ok(rv)

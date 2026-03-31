@@ -23,6 +23,7 @@ pub struct BenchSuiteCollectDacapoLatency {
 }
 
 impl BenchSuiteCollectDacapoLatency {
+    #[must_use]
     pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }
@@ -71,7 +72,7 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
             ])
             .select([all().exclude_cols(["end_ns"]).as_expr()]);
 
-        let table_name = Intern::new(format!("dacapo_latency_{}", file_type));
+        let table_name = Intern::new(format!("dacapo_latency_{file_type}"));
 
         match self.latency_tables.get_mut(&table_name) {
             Some(existing) => {

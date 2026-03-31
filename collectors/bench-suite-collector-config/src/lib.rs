@@ -8,6 +8,7 @@ use string_intern::Intern;
 pub struct BenchSuiteCollectConfig {}
 
 impl BenchSuiteCollectConfig {
+    #[must_use]
     pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }
@@ -23,6 +24,9 @@ impl BenchSuiteCollect for BenchSuiteCollectConfig {
     }
 
     fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, LazyFrame)>> {
-        Ok(vec![(Intern::from_static("config"), config.to_df()?.lazy())])
+        Ok(vec![(
+            Intern::from_static("config"),
+            config.to_df()?.lazy(),
+        )])
     }
 }

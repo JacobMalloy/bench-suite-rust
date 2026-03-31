@@ -1,14 +1,14 @@
 use anyhow::{Context, Result, anyhow};
 use crossbeam::channel;
+use polars::polars_utils::compression::ZstdLevel;
 use polars::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex,mpsc};
+use std::sync::{Mutex, mpsc};
 use std::thread;
-use polars::polars_utils::compression::ZstdLevel;
 
 use string_intern::Intern;
 
@@ -38,7 +38,7 @@ where
     fn consume(&self) -> Option<(u64, &'a BenchSuiteRun, Vec<&'a str>, PathBuf)> {
         let mut guard = self.it.lock().unwrap();
         let tmp = guard.next();
-        if tmp.is_some(){
+        if tmp.is_some() {
             self.pb.tick();
             self.pb.inc(1);
         }
@@ -46,12 +46,19 @@ where
     }
 }
 
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+struct DatabaseLocation {
+    directory: Intern,
+    db_name: Intern,
+}
+
 type ParquetSubmit = (String, DataFrame);
+type LazyFrameSendChannel = mpsc::SyncSender<LazyFrame>;
 
 #[derive(Clone)]
 struct TableSubmitter<'scope, 'env> {
-    source: Arc<Mutex<HashMap<(Intern, Intern), mpsc::SyncSender<LazyFrame>>>>,
-    local: HashMap<(Intern, Intern), mpsc::SyncSender<LazyFrame>>,
+    source: Arc<Mutex<HashMap<DatabaseLocation, LazyFrameSendChannel>>>,
+    local: HashMap<DatabaseLocation, LazyFrameSendChannel>,
     scope: &'scope std::thread::Scope<'scope, 'env>,
     base_location: &'scope str,
     submit_queue: channel::Sender<ParquetSubmit>,
@@ -59,9 +66,9 @@ struct TableSubmitter<'scope, 'env> {
 }
 
 fn parquet_thread(
-    rx: std::sync::mpsc::Receiver<LazyFrame>,
-    location: std::path::PathBuf,
-    write_channel: channel::Sender<ParquetSubmit>,
+    rx: &std::sync::mpsc::Receiver<LazyFrame>,
+    location: &Path,
+    write_channel: &channel::Sender<ParquetSubmit>,
 ) {
     let mut index: u64 = 0;
     let mut data: Option<DataFrame> = None;
@@ -73,11 +80,11 @@ fn parquet_thread(
             None => {
                 data = Some(msg.collect().unwrap());
             }
-        };
+        }
 
         data = if let Some(mut df) = data.take() {
             if df.estimated_size() >= 750 * 1024 * 1024 {
-                df = polars_helpers::shrink_int_columns(df).unwrap();
+                df = polars_helpers::shrink_int_columns(&df).unwrap();
                 write_channel
                     .send((format!("{}_{}.parquet", location.display(), index), df))
                     .unwrap();
@@ -91,7 +98,7 @@ fn parquet_thread(
         }
     }
     if let Some(mut df) = data {
-        df = polars_helpers::shrink_int_columns(df).unwrap();
+        df = polars_helpers::shrink_int_columns(&df).unwrap();
         write_channel
             .send((format!("{}_{}.parquet", location.display(), index), df))
             .unwrap();
@@ -114,10 +121,10 @@ fn parquet_write_thread(inputs: channel::Receiver<ParquetSubmit>) {
 impl<'scope, 'env> TableSubmitter<'scope, 'env> {
     pub fn submit(
         &mut self,
-        key: (Intern, Intern),
+        key: DatabaseLocation,
         value: LazyFrame,
     ) -> std::result::Result<(), Box<std::sync::mpsc::SendError<LazyFrame>>> {
-        if self.drop_tables.contains(&key.1) {
+        if self.drop_tables.contains(&key.db_name) {
             return Ok(());
         }
         let base_location = self.base_location;
@@ -131,10 +138,12 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
                     let (tx, rx) = mpsc::sync_channel(1);
                     let submit = self.submit_queue.clone();
                     thread::Builder::new()
-                        .name(format!("{}_{}", key.1, key.0))
+                        .name(format!("{}_{}", key.db_name, key.directory))
                         .spawn_scoped(scope, move || {
-                            let path = Path::new(base_location).join(key.0).join(key.1);
-                            parquet_thread(rx, path, submit);
+                            let path = Path::new(base_location)
+                                .join(key.directory)
+                                .join(key.db_name);
+                            parquet_thread(&rx, &path, &submit);
                         })
                         .unwrap();
                     tx
@@ -187,9 +196,9 @@ fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, L
             .to_string();
         let mut file_info = FileInfo::new(path.as_str(), file);
 
-        for i in collectors.iter_mut() {
+        for i in &mut collectors {
             if let Err(e) = i.process_file(run, &mut file_info) {
-                parsing_issues.push(format!("process_file({}): {:?}", path, e));
+                parsing_issues.push(format!("process_file({path}): {e:?}"));
             }
         }
     }
@@ -207,7 +216,7 @@ fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, L
                 }
             }
             Err(e) => {
-                parsing_issues.push(format!("get_result: {:?}", e));
+                parsing_issues.push(format!("get_result: {e:?}"));
             }
         }
     }
@@ -233,31 +242,47 @@ where
             Err(e) => {
                 // process_run itself failed
                 let parse_status_df = df![
-                    "message" => &[format!("{:?}", e)],
+                    "message" => &[format!("{e:?}")],
                 ]
                 .unwrap();
                 HashMap::from([(Intern::new("parse_status"), parse_status_df.lazy())])
             }
         };
 
-        for (key, mut val) in map.into_iter() {
+        for (key, mut val) in map {
             val = val.with_column(lit(id).alias("id"));
             if let Some((last, remaining)) = paths.split_last() {
-                for p in remaining.iter() {
+                for p in remaining {
                     submitter
-                        .submit((Intern::new(*p), key), val.clone())
+                        .submit(
+                            DatabaseLocation {
+                                directory: Intern::new(*p),
+                                db_name: key,
+                            },
+                            val.clone(),
+                        )
                         .unwrap();
                 }
-                submitter.submit((Intern::new(*last), key), val).unwrap();
+                submitter
+                    .submit(
+                        DatabaseLocation {
+                            directory: Intern::new(*last),
+                            db_name: key,
+                        },
+                        val,
+                    )
+                    .unwrap();
             }
         }
     }
 }
 
 fn main() {
-    let config_file_path = env::args()
-        .nth(1)
-        .expect("You need to provide a an argument for the path");
+    let config_file_path = PathBuf::from(
+        env::args()
+            .nth(1)
+            .expect("You need to provide a an argument for the path"),
+    );
 
     let config = BenchSuiteTasks::new(&config_file_path).unwrap();
 
@@ -287,7 +312,12 @@ fn main() {
     let (write_send, write_recieve) = channel::bounded(5);
 
     std::thread::scope(|x| {
-        let s = TableSubmitter::new(x, config.get_path().to_str().unwrap(), write_send, config.get_drop_tables());
+        let s = TableSubmitter::new(
+            x,
+            config.get_path().to_str().unwrap(),
+            write_send,
+            config.get_drop_tables(),
+        );
         for i in 0..16 {
             let tmp_recieve = write_recieve.clone();
             thread::Builder::new()
@@ -301,6 +331,6 @@ fn main() {
                 process_thread(&queue, tmp_s);
             });
         }
-        drop(s)
+        drop(s);
     });
 }

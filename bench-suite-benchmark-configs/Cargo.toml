@@ -3,6 +3,9 @@ name = "bench-suite-benchmark-configs"
 version = "0.1.0"
 edition = "2024"
 
+[lints.clippy]
+pedantic = "warn"
+
 [dependencies]
 bench-suite-collector-config = {path = "../collectors/bench-suite-collector-config/"}
 bench-suite-collector-time = {path = "../collectors/bench-suite-collector-time/"}

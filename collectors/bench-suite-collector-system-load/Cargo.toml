@@ -3,6 +3,9 @@ name = "bench-suite-collector-system-load"
 version = "0.1.0"
 edition = "2024"
 
+[lints.clippy]
+pedantic = "warn"
+
 [dependencies]
 polars = {workspace = true, features = ["temporal", "strings", "regex", "timezones"]}
 bench-suite-types = {path="../../bench-suite-types"}

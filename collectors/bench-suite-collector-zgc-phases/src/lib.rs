@@ -18,6 +18,7 @@ pub struct BenchSuiteCollectZgcPhases {
 }
 
 impl BenchSuiteCollectZgcPhases {
+    #[must_use]
     pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }
@@ -71,8 +72,18 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcPhases {
 
             clock_times.push(clock_time.to_string());
             gc_numbers.push(gc_number);
-            let type_char = phase_type.chars().next().ok_or( anyhow::anyhow!("ZGC age does not have a single char"))?;
-            phase_types.push(if type_char.is_lowercase() {"minor"} else {"major"}.into());
+            let type_char = phase_type
+                .chars()
+                .next()
+                .ok_or(anyhow::anyhow!("ZGC age does not have a single char"))?;
+            phase_types.push(
+                if type_char.is_lowercase() {
+                    "minor"
+                } else {
+                    "major"
+                }
+                .into(),
+            );
             phase_ages.push(type_char.to_lowercase().to_string());
             phase_names.push(phase_name.to_string());
             phase_times_ms.push(phase_time);

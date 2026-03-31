@@ -14,6 +14,7 @@ pub struct BenchSuiteCollectDacapoIteration {
 }
 
 impl BenchSuiteCollectDacapoIteration {
+    #[must_use]
     pub fn boxed() -> Box<dyn BenchSuiteCollect> {
         Box::new(Self::default())
     }
@@ -40,7 +41,7 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoIteration {
             .filter_map(|cap| cap.get(1)?.as_str().parse().ok())
             .collect();
 
-        let indices: Vec<u32> = (0..iterations.len() as u32).collect();
+        let indices: Vec<u64> = (0..iterations.len() as u64).collect();
 
         let df = df![
             "dacapo_iteration" => indices,

@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::path::Path;
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -18,10 +19,17 @@ pub struct BenchSuiteTasks {
 }
 
 impl BenchSuiteTasks {
-    pub fn new(config_file_path: &str) -> Result<Self> {
+    /// Get the `BenchSuiteTasks` at a folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the task file at `config_file_path` cannot be opened or parsed as JSON.
+    /// Returns `Err` if the `status.json` file in the configured location cannot be opened or parsed as JSON.
+    /// Returns `Err` if any run ID key in the status file cannot be parsed as a `u64`.
+    pub fn new(config_file_path: &Path) -> Result<Self> {
         let task_file = BufReader::new(File::open(config_file_path).context(std::format!(
             "Failed to open task file {}",
-            config_file_path
+            config_file_path.display()
         ))?);
 
         let task_config: BenchSuiteTaskConfig =
@@ -36,7 +44,7 @@ impl BenchSuiteTasks {
             serde_json::from_reader(status_reader).context("Failed to parse status file")?;
 
         let BenchSuiteStatus {
-            bench_index: _,
+            _bench_index: _,
             benchmark_runs,
         } = status;
 
@@ -57,21 +65,22 @@ impl BenchSuiteTasks {
     }
 
     pub fn collection_names(&self) -> impl Iterator<Item = &str> {
-        self.collections.keys().map(|s| s.as_str())
+        self.collections.keys().map(String::as_str)
     }
 
+    #[must_use]
     pub fn get_path(&self) -> &PathBuf {
         &self.location
     }
 
+    #[must_use]
     pub fn get_drop_tables(&self) -> &HashSet<Intern> {
         &self.drop_tables
     }
 
+    #[must_use]
     pub fn tar_file_path(&self, id: u64) -> PathBuf {
-        self.location
-            .join("runs")
-            .join(format!("{:016X}.tar.xz", id))
+        self.location.join("runs").join(format!("{id:016X}.tar.xz"))
     }
 
     pub fn to_collect(&self) -> impl Iterator<Item = (u64, &BenchSuiteRun, Vec<&str>, PathBuf)> {
@@ -99,6 +108,6 @@ struct BenchSuiteTaskConfig {
 
 #[derive(Debug, Deserialize)]
 struct BenchSuiteStatus {
-    bench_index: f64,
+    _bench_index: f64,
     benchmark_runs: HashMap<String, BenchSuiteRun>,
 }

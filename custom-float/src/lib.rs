@@ -23,7 +23,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Zero => write!(f, "Expected a NonZero float"),
-            Error::Negative(v) => write!(f, "Expected a Non Negative float got {}", v),
+            Error::Negative(v) => write!(f, "Expected a Non Negative float got {v}"),
             Error::NaN => write!(f, "Expected a real number, got NaN"),
         }
     }
@@ -32,6 +32,13 @@ impl Display for Error {
 impl error::Error for Error {}
 
 impl PositiveNonZeroF64 {
+    /// Creates a new `PositiveNonZeroF64` from a `f64` value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::NaN` if `val` is NaN.
+    /// Returns `Error::Negative` if `val` is negative.
+    /// Returns `Error::Zero` if `val` is zero.
     pub fn new(val: f64) -> Result<Self, Error> {
         if val.is_nan() {
             Err(Error::NaN)
@@ -57,16 +64,17 @@ impl PositiveNonZeroF64 {
     ///
     /// Violating these invariants may cause undefined behavior in code
     /// that relies on the guarantees of `PositiveNonZeroF64`.
+    #[must_use]
     pub unsafe fn new_unchecked(val: f64) -> Self {
         debug_assert!(
             val > 0.0,
-            "PositiveNonZeroF64::new_unchecked called with invalid value: {}",
-            val
+            "PositiveNonZeroF64::new_unchecked called with invalid value: {val}"
         );
         // SAFETY: Caller guarantees val is positive and non-zero
         unsafe { Self(NonZeroU64::new_unchecked(val.to_bits())) }
     }
 
+    #[must_use]
     pub fn get(self) -> f64 {
         f64::from_bits(self.0.get())
     }

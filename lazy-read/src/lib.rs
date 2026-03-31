@@ -18,6 +18,12 @@ where
     pub fn new(input: T) -> Self {
         Self::Orig(input)
     }
+    /// Reads the content as a UTF-8 string, caching the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::IO` if reading from the underlying reader fails.
+    /// Returns `Error::FromUTF8` if the content is not valid UTF-8.
     pub fn get_string(&mut self) -> Result<&str> {
         match self {
             LazyRead::Orig(v) => {
@@ -30,7 +36,7 @@ where
                 *self = LazyRead::String(String::from_utf8(tmp)?);
             }
             LazyRead::String(_) => {}
-        };
+        }
 
         Ok(if let LazyRead::String(s) = self {
             s
@@ -38,6 +44,11 @@ where
             unreachable!()
         })
     }
+    /// Reads the content as raw bytes, caching the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::IO` if reading from the underlying reader fails.
     pub fn get_bytes(&mut self) -> Result<&[u8]> {
         if let LazyRead::Orig(v) = self {
             let mut b = Vec::new();

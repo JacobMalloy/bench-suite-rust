@@ -341,14 +341,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bench-suite-run"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bench-suite-config",
-]
-
-[[package]]
 name = "bench-suite-types"
 version = "0.1.0"
 dependencies = [

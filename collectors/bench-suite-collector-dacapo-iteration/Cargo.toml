@@ -3,6 +3,9 @@ name = "bench-suite-collector-dacapo-iteration"
 version = "0.1.0"
 edition = "2024"
 
+[lints.clippy]
+pedantic = "warn"
+
 [dependencies]
 polars = {workspace = true}
 bench-suite-types = {path="../../bench-suite-types"}
