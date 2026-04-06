@@ -132,6 +132,7 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     mark_abuse_warmup:NonZero<u64>,
     mark_abuse_graph_nodes:NonZero<u64>,
     mark_abuse_edges_per_node:NonZero<u64>,
+    mark_abuse_rotate_interval:u64,
 
 
     //threadstat
