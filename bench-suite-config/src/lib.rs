@@ -44,7 +44,7 @@ impl BenchSuiteTasks {
             serde_json::from_reader(status_reader).context("Failed to parse status file")?;
 
         let BenchSuiteStatus {
-            _bench_index: _,
+            bench_index: _,
             benchmark_runs,
         } = status;
 
@@ -108,6 +108,6 @@ struct BenchSuiteTaskConfig {
 
 #[derive(Debug, Deserialize)]
 struct BenchSuiteStatus {
-    _bench_index: f64,
+    bench_index: f64,
     benchmark_runs: HashMap<String, BenchSuiteRun>,
 }
