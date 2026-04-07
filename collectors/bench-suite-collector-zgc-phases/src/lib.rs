@@ -110,19 +110,27 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcPhases {
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
         if let Some(df) = self.phases_df {
-            let lf = df.lazy().with_column(
-                col("clock_time").str().to_datetime(
-                    Some(TimeUnit::Milliseconds),
-                    None,
-                    StrptimeOptions {
-                        format: Some("%Y-%m-%dT%H:%M:%S%.3f%z".into()),
-                        strict: false,
-                        exact: true,
-                        cache: true,
-                    },
-                    lit("raise"),
-                ),
-            );
+            let lf = df
+                .lazy()
+                .with_column(
+                    col("clock_time").str().to_datetime(
+                        Some(TimeUnit::Milliseconds),
+                        None,
+                        StrptimeOptions {
+                            format: Some("%Y-%m-%dT%H:%M:%S%.3f%z".into()),
+                            strict: false,
+                            exact: true,
+                            cache: true,
+                        },
+                        lit("raise"),
+                    ),
+                )
+                .with_column(
+                    (col("clock_time").cast(DataType::Int64)
+                        - col("time_ms").cast(DataType::Int64))
+                    .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
+                    .alias("start_time"),
+                );
             rv.push((Intern::from_static("zgc_phases"), lf));
         }
         Ok(rv)
