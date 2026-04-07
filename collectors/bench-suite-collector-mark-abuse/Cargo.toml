@@ -1,0 +1,15 @@
+[package]
+name = "bench-suite-collector-mark-abuse"
+version = "0.1.0"
+edition = "2024"
+
+[lints.clippy]
+pedantic = "warn"
+
+[dependencies]
+polars = {workspace = true}
+bench-suite-types = {path="../../bench-suite-types"}
+bench-suite-collect-results = {path="../../bench-suite-collect-results"}
+string-intern = {workspace = true}
+anyhow = {workspace = true}
+regex = "1"
