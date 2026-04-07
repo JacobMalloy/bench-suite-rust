@@ -1,0 +1,15 @@
+[package]
+name = "bench-suite-collector-g1-phases"
+version = "0.1.0"
+edition = "2024"
+
+[lints.clippy]
+pedantic = "warn"
+
+[dependencies]
+polars = {workspace = true, features = ["cum_agg"]}
+bench-suite-types = {path="../../bench-suite-types"}
+bench-suite-collect-results = {path="../../bench-suite-collect-results"}
+string-intern = {workspace = true}
+anyhow = {workspace = true}
+regex = "1"
