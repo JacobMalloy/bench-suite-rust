@@ -189,7 +189,10 @@ dependencies = [
  "bench-suite-collector-config",
  "bench-suite-collector-dacapo-iteration",
  "bench-suite-collector-dacapo-latency",
+ "bench-suite-collector-g1-phases",
+ "bench-suite-collector-git-info",
  "bench-suite-collector-java-threads",
+ "bench-suite-collector-mark-abuse",
  "bench-suite-collector-status",
  "bench-suite-collector-system-load",
  "bench-suite-collector-threadstat",
@@ -262,7 +265,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "bench-suite-collector-g1-phases"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-collect-results",
+ "bench-suite-types",
+ "polars",
+ "regex",
+ "string-intern",
+]
+
+[[package]]
+name = "bench-suite-collector-git-info"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-collect-results",
+ "bench-suite-types",
+ "polars",
+ "string-intern",
+]
+
+[[package]]
 name = "bench-suite-collector-java-threads"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-collect-results",
+ "bench-suite-types",
+ "polars",
+ "regex",
+ "string-intern",
+]
+
+[[package]]
+name = "bench-suite-collector-mark-abuse"
 version = "0.1.0"
 dependencies = [
  "anyhow",
