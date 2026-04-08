@@ -2,23 +2,14 @@ use anyhow::Context;
 use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
 use regex::Regex;
-use std::collections::HashMap;
 use std::sync::LazyLock;
 use string_intern::Intern;
 
-// Matches: GC(0) Major Collection (Warmup)  or  GC(0) Minor Collection (Eden)
-static GC_COLLECTION_TYPE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\[gc\s*\] GC\((\d+)\) (Major|Minor) Collection").unwrap()
-});
-
 // Matches:
-//   GC(0) Using 4 Workers for Young Generation
-//   GC(0) O: Using 4 Workers for Old Generation
+//   GC(759) Using 2 Workers for Young Generation
+//   GC(759) Using 1 Workers for Old Generation
 static GC_TASK_WORKERS_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"\[gc,task\s*\] GC\((\d+)\)(?:( O:))? Using (\d+) Workers for (\w+) Generation",
-    )
-    .unwrap()
+    Regex::new(r"\[gc,task\s*\] GC\((\d+)\) Using (\d+) Workers for (\w+) Generation").unwrap()
 });
 
 #[derive(Debug, Default)]
@@ -54,24 +45,7 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcTask {
 
         let content = file.content_string()?;
 
-        // Build gc_number -> "major"/"minor" map
-        let mut collection_types: HashMap<u64, &str> = HashMap::new();
-        for cap in GC_COLLECTION_TYPE_REGEX.captures_iter(content) {
-            let gc_number: u64 = cap
-                .get(1)
-                .context("Missing GC number")?
-                .as_str()
-                .parse()
-                .context("Failed to parse GC number")?;
-            let collection_type = match cap.get(2).context("Missing collection type")?.as_str() {
-                "Major" => "major",
-                _ => "minor",
-            };
-            collection_types.insert(gc_number, collection_type);
-        }
-
         let mut gc_numbers: Vec<u64> = Vec::new();
-        let mut types: Vec<String> = Vec::new();
         let mut ages: Vec<&str> = Vec::new();
         let mut num_workers: Vec<u32> = Vec::new();
 
@@ -83,13 +57,13 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcTask {
                 .parse()
                 .context("Failed to parse GC number")?;
             let workers: u32 = cap
-                .get(3)
+                .get(2)
                 .context("Missing worker count")?
                 .as_str()
                 .parse()
                 .context("Failed to parse worker count")?;
             let age = if cap
-                .get(4)
+                .get(3)
                 .context("Missing generation")?
                 .as_str()
                 .to_lowercase()
@@ -99,20 +73,14 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcTask {
             } else {
                 "o"
             };
-            let collection_type = collection_types
-                .get(&gc_number)
-                .copied()
-                .unwrap_or("unknown");
 
             gc_numbers.push(gc_number);
-            types.push(collection_type.to_string());
             ages.push(age);
             num_workers.push(workers);
         }
 
         let df = df![
             "gc_number" => gc_numbers,
-            "type" => types,
             "age" => ages,
             "num_workers" => num_workers,
         ]
