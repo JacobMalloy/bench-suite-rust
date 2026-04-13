@@ -12,6 +12,7 @@ use bench_suite_collector_git_info::BenchSuiteCollectGitInfo;
 use bench_suite_collector_mark_abuse::BenchSuiteCollectMarkAbuse;
 use bench_suite_collector_zgc_phases::BenchSuiteCollectZgcPhases;
 use bench_suite_collector_zgc_task::BenchSuiteCollectZgcTask;
+use bench_suite_collector_zgc_stats::BenchSuiteCollectZgcStats;
 
 type Result<T> = std::result::Result<T, InvalidBenchmark>;
 
@@ -39,7 +40,7 @@ impl std::fmt::Display for InvalidBenchmark {
 
 impl std::error::Error for InvalidBenchmark {}
 
-const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 12] = [
+const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectDacapoIteration::boxed,
@@ -52,10 +53,11 @@ const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 12] = [
     BenchSuiteCollectG1Phases::boxed,
     BenchSuiteCollectGitInfo::boxed,
     BenchSuiteCollectZgcTask::boxed,
+    BenchSuiteCollectZgcStats::boxed,
 ];
 
 
-const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 11] = [
+const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 12] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectJavaThreads::boxed,
@@ -67,6 +69,7 @@ const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 11] = [
     BenchSuiteCollectGitInfo::boxed,
     BenchSuiteCollectMarkAbuse::boxed,
     BenchSuiteCollectZgcTask::boxed,
+    BenchSuiteCollectZgcStats::boxed,
 ];
 
 type CreateCollectorFunction = fn() -> Box<dyn BenchSuiteCollect>;

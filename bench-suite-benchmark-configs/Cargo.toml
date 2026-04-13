@@ -16,6 +16,7 @@ bench-suite-collector-g1-phases = {path = "../collectors/bench-suite-collector-g
 bench-suite-collector-git-info = {path = "../collectors/bench-suite-collector-git-info/"}
 bench-suite-collector-mark-abuse = {path = "../collectors/bench-suite-collector-mark-abuse/"}
 bench-suite-collector-zgc-task = {path = "../collectors/bench-suite-collector-zgc-task/"}
+bench-suite-collector-zgc-stats = {path = "../collectors/bench-suite-collector-zgc-stats/"}
 bench-suite-collector-java-threads = {path = "../collectors/bench-suite-collector-java-threads/"}
 bench-suite-collector-status = {path = "../collectors/bench-suite-collector-status/"}
 bench-suite-collector-threadstat = {path = "../collectors/bench-suite-collector-threadstat/"}

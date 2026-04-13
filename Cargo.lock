@@ -198,6 +198,7 @@ dependencies = [
  "bench-suite-collector-threadstat",
  "bench-suite-collector-time",
  "bench-suite-collector-zgc-phases",
+ "bench-suite-collector-zgc-stats",
  "bench-suite-collector-zgc-task",
 ]
 
@@ -358,6 +359,18 @@ dependencies = [
 
 [[package]]
 name = "bench-suite-collector-zgc-phases"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-collect-results",
+ "bench-suite-types",
+ "polars",
+ "regex",
+ "string-intern",
+]
+
+[[package]]
+name = "bench-suite-collector-zgc-stats"
 version = "0.1.0"
 dependencies = [
  "anyhow",
