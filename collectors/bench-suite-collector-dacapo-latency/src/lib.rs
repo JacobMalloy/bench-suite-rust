@@ -91,6 +91,15 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
         self: Box<Self>,
         _: &bench_suite_types::BenchSuiteRun,
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
-        Ok(self.latency_tables.into_iter().collect())
+        Ok(self
+            .latency_tables
+            .into_iter()
+            .map(|(name, lf)| {
+                let lf = lf.with_column(
+                    col("duration").cast(DataType::Duration(TimeUnit::Nanoseconds)),
+                );
+                (name, lf)
+            })
+            .collect())
     }
 }

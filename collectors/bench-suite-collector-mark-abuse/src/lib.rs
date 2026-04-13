@@ -61,11 +61,23 @@ impl BenchSuiteCollect for BenchSuiteCollectMarkAbuse {
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
         if let Some(lf) = self.combined {
-            let lf = lf.with_column(
-                col("timestamp_ms")
-                    .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
-                    .alias("timestamp_ms"),
-            );
+            let lf = lf
+                .with_column(
+                    col("timestamp_ms")
+                        .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
+                        .alias("timestamp_ms"),
+                )
+                .with_column(
+                    col("gc_time_delta_ms")
+                        .cast(DataType::Duration(TimeUnit::Milliseconds)),
+                )
+                .with_column(
+                    (col("time_s") * lit(1_000_000.0))
+                        .cast(DataType::Int64)
+                        .cast(DataType::Duration(TimeUnit::Microseconds))
+                        .alias("time_s"),
+                )
+                .rename(["time_s"], ["time_us"], false);
             rv.push((Intern::from_static("mark_abuse"), lf));
         }
         Ok(rv)

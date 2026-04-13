@@ -130,7 +130,14 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcPhases {
                         - col("time_ms").cast(DataType::Int64))
                     .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
                     .alias("start_time"),
-                );
+                )
+                .with_column(
+                    (col("time_ms") * lit(1000.0))
+                        .cast(DataType::Int64)
+                        .cast(DataType::Duration(TimeUnit::Microseconds))
+                        .alias("time_ms"),
+                )
+                .rename(["time_ms"], ["time_us"], false);
             rv.push((Intern::from_static("zgc_phases"), lf));
         }
         Ok(rv)
