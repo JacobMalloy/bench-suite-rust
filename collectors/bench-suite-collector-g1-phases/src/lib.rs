@@ -7,10 +7,8 @@ use std::sync::LazyLock;
 use string_intern::Intern;
 
 static GC_PHASE_TIMES_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"\[([^\]]*)\]\[info\s*\]\[gc,phases\s*\] GC\((\d+)\)\s+([A-Za-z ]+):\s+([0-9.]+)ms",
-    )
-    .unwrap()
+    Regex::new(r"\[([^\]]*)\]\[info\s*\]\[gc,phases\s*\] GC\((\d+)\)\s+([A-Za-z ]+):\s+([0-9.]+)ms")
+        .unwrap()
 });
 
 static GC_TYPE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
@@ -128,19 +126,17 @@ impl BenchSuiteCollect for BenchSuiteCollectG1Phases {
             // offset from end-of-pause back to its own start.
             let lf = df
                 .lazy()
-                .with_column(
-                    col("clock_time").str().to_datetime(
-                        Some(TimeUnit::Milliseconds),
-                        None,
-                        StrptimeOptions {
-                            format: Some("%Y-%m-%dT%H:%M:%S%.3f%z".into()),
-                            strict: false,
-                            exact: true,
-                            cache: true,
-                        },
-                        lit("raise"),
-                    ),
-                )
+                .with_column(col("clock_time").str().to_datetime(
+                    Some(TimeUnit::Milliseconds),
+                    None,
+                    StrptimeOptions {
+                        format: Some("%Y-%m-%dT%H:%M:%S%.3f%z".into()),
+                        strict: false,
+                        exact: true,
+                        cache: true,
+                    },
+                    lit("raise"),
+                ))
                 .with_column(
                     (col("clock_time").cast(DataType::Int64)
                         - col("time_ms")

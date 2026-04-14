@@ -68,8 +68,7 @@ impl BenchSuiteCollect for BenchSuiteCollectMarkAbuse {
                         .alias("timestamp_ms"),
                 )
                 .with_column(
-                    col("gc_time_delta_ms")
-                        .cast(DataType::Duration(TimeUnit::Milliseconds)),
+                    col("gc_time_delta_ms").cast(DataType::Duration(TimeUnit::Milliseconds)),
                 )
                 .with_column(
                     (col("time_s") * lit(1_000_000.0))

@@ -95,9 +95,8 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
             .latency_tables
             .into_iter()
             .map(|(name, lf)| {
-                let lf = lf.with_column(
-                    col("duration").cast(DataType::Duration(TimeUnit::Nanoseconds)),
-                );
+                let lf =
+                    lf.with_column(col("duration").cast(DataType::Duration(TimeUnit::Nanoseconds)));
                 (name, lf)
             })
             .collect())

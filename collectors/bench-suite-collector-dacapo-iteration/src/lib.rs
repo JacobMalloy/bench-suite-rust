@@ -61,8 +61,7 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoIteration {
         let mut rv = Vec::new();
         if let Some(df) = self.iteration_df {
             let lf = df.lazy().with_column(
-                col("dacapo_iteration_time_ms")
-                    .cast(DataType::Duration(TimeUnit::Milliseconds)),
+                col("dacapo_iteration_time_ms").cast(DataType::Duration(TimeUnit::Milliseconds)),
             );
             rv.push((Intern::from_static("dacapo_iteration"), lf));
         }

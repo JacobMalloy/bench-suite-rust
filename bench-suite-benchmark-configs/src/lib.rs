@@ -2,17 +2,17 @@ use bench_suite_collect_results::BenchSuiteCollect;
 use bench_suite_collector_config::BenchSuiteCollectConfig;
 use bench_suite_collector_dacapo_iteration::BenchSuiteCollectDacapoIteration;
 use bench_suite_collector_dacapo_latency::BenchSuiteCollectDacapoLatency;
+use bench_suite_collector_g1_phases::BenchSuiteCollectG1Phases;
+use bench_suite_collector_git_info::BenchSuiteCollectGitInfo;
 use bench_suite_collector_java_threads::BenchSuiteCollectJavaThreads;
+use bench_suite_collector_mark_abuse::BenchSuiteCollectMarkAbuse;
 use bench_suite_collector_status::BenchSuiteCollectStatus;
 use bench_suite_collector_system_load::BenchSuiteCollectSystemLoad;
 use bench_suite_collector_threadstat::BenchSuiteCollectThreadstat;
 use bench_suite_collector_time::BenchSuiteCollectTime;
-use bench_suite_collector_g1_phases::BenchSuiteCollectG1Phases;
-use bench_suite_collector_git_info::BenchSuiteCollectGitInfo;
-use bench_suite_collector_mark_abuse::BenchSuiteCollectMarkAbuse;
 use bench_suite_collector_zgc_phases::BenchSuiteCollectZgcPhases;
-use bench_suite_collector_zgc_task::BenchSuiteCollectZgcTask;
 use bench_suite_collector_zgc_stats::BenchSuiteCollectZgcStats;
+use bench_suite_collector_zgc_task::BenchSuiteCollectZgcTask;
 
 type Result<T> = std::result::Result<T, InvalidBenchmark>;
 
@@ -55,7 +55,6 @@ const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
     BenchSuiteCollectZgcTask::boxed,
     BenchSuiteCollectZgcStats::boxed,
 ];
-
 
 const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 12] = [
     BenchSuiteCollectConfig::boxed,
