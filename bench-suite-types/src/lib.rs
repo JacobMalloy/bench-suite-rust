@@ -109,6 +109,8 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     GCThreadCPUs:Intern,
     NonGCThreadCPUs:Intern,
 
+    java_thp:bool,
+
     ResctrlIdleGCMask:NonZero<u64>,
     ResctrlMarkingGCMask:NonZero<u64>,
     ResctrlCollectingGCMask:NonZero<u64>,
