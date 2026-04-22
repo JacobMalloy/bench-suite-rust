@@ -100,6 +100,8 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     classpath:Intern,
 
     gc_logging:Intern,
+    java_log_gc:Intern,
+    java_log_os:Intern,
     memory_ratio:PositiveNonZeroF64,
     memory_config:NonZero<u64>,
     softmax:Intern,
@@ -108,6 +110,8 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 
     GCThreadCPUs:Intern,
     NonGCThreadCPUs:Intern,
+
+    zgc_deactivate_proactive:bool,
 
     java_thp:bool,
 
