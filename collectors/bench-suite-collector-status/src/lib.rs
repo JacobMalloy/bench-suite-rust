@@ -34,7 +34,9 @@ impl BenchSuiteCollect for BenchSuiteCollectStatus {
             return Ok(());
         }
 
-        if name == "jvm0.txt" {
+        if name == "os.javalog"
+            || name == "jvm0.txt" // LEGACY: remove once all tests use split files
+        {
             if file.content_string()?.contains("Resctrl: Failed") {
                 self.resctrl_failed = true;
             }

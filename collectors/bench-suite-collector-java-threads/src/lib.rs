@@ -32,12 +32,15 @@ impl BenchSuiteCollect for BenchSuiteCollectJavaThreads {
         _: &bench_suite_types::BenchSuiteRun,
         file: &mut dyn bench_suite_collect_results::FileInfoInterface,
     ) -> anyhow::Result<()> {
-        if file.name() != "jvm0.txt" {
+        let name = file.name();
+        if name != "os.javalog"
+            && name != "jvm0.txt" // LEGACY: remove once all tests use split files
+        {
             return Ok(());
         }
 
         if self.threads_df.is_some() {
-            return Err(anyhow::anyhow!("Duplicate jvm0.txt files"));
+            return Err(anyhow::anyhow!("Duplicate os log files"));
         }
 
         let content = file.content_string()?;

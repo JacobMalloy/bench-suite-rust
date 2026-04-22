@@ -41,12 +41,15 @@ impl BenchSuiteCollect for BenchSuiteCollectG1Phases {
             _ => return Ok(()),
         }
 
-        if file.name() != "jvm0.txt" {
+        let name = file.name();
+        if name != "gc.javalog"
+            && name != "jvm0.txt" // LEGACY: remove once all tests use split files
+        {
             return Ok(());
         }
 
         if self.phases_df.is_some() {
-            return Err(anyhow::anyhow!("Duplicate jvm0.txt files"));
+            return Err(anyhow::anyhow!("Duplicate gc log files"));
         }
 
         let content = file.content_string()?;

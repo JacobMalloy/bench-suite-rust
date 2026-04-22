@@ -26,12 +26,15 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoIteration {
         _: &bench_suite_types::BenchSuiteRun,
         file: &mut dyn bench_suite_collect_results::FileInfoInterface,
     ) -> anyhow::Result<()> {
-        if file.name() != "jvm0.txt" {
+        let name = file.name();
+        if name != "jvm0.stdout"
+            && name != "jvm0.txt" // LEGACY: remove once all tests use split files
+        {
             return Ok(());
         }
 
         if self.iteration_df.is_some() {
-            return Err(anyhow::anyhow!("Duplicate jvm0.txt files"));
+            return Err(anyhow::anyhow!("Duplicate stdout files"));
         }
 
         let content = file.content_string()?;
