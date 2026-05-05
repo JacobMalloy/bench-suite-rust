@@ -298,7 +298,10 @@ fn main() {
     }
 
     let progress = indicatif::MultiProgress::new();
-    let main_progress = progress.add(indicatif::ProgressBar::new_spinner());
+    let main_progress = progress.add(
+        indicatif::ProgressBar::new_spinner()
+            .with_finish(indicatif::ProgressFinish::AndLeave),
+    );
     main_progress.set_style(
         indicatif::ProgressStyle::default_spinner()
             .template("{spinner:.cyan} [{human_pos}] [{elapsed_precise}] {msg}")
