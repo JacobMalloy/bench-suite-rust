@@ -107,6 +107,9 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     softmax:Intern,
     softmax_ratio:PositiveNonZeroF64,
     concgcthreads:NonZero<u64>,
+    jdk_tiered_compilation:bool,
+    zgc_barrier_use_global_variable:bool,
+    zgc_barrier_rewrite_on_phase_change:bool,
 
     GCThreadCPUs:Intern,
     NonGCThreadCPUs:Intern,
