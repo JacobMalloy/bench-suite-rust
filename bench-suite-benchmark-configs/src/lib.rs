@@ -6,10 +6,12 @@ use bench_suite_collector_g1_phases::BenchSuiteCollectG1Phases;
 use bench_suite_collector_git_info::BenchSuiteCollectGitInfo;
 use bench_suite_collector_java_threads::BenchSuiteCollectJavaThreads;
 use bench_suite_collector_mark_abuse::BenchSuiteCollectMarkAbuse;
+use bench_suite_collector_specjbb::BenchSuiteCollectSpecjbb;
 use bench_suite_collector_status::BenchSuiteCollectStatus;
 use bench_suite_collector_system_load::BenchSuiteCollectSystemLoad;
 use bench_suite_collector_threadstat::BenchSuiteCollectThreadstat;
 use bench_suite_collector_time::BenchSuiteCollectTime;
+use bench_suite_collector_zgc_gc_summary::BenchSuiteCollectZgcGcSummary;
 use bench_suite_collector_zgc_phases::BenchSuiteCollectZgcPhases;
 use bench_suite_collector_zgc_stats::BenchSuiteCollectZgcStats;
 use bench_suite_collector_zgc_task::BenchSuiteCollectZgcTask;
@@ -40,7 +42,7 @@ impl std::fmt::Display for InvalidBenchmark {
 
 impl std::error::Error for InvalidBenchmark {}
 
-const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
+const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectDacapoIteration::boxed,
@@ -50,13 +52,14 @@ const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
     BenchSuiteCollectSystemLoad::boxed,
     BenchSuiteCollectThreadstat::boxed,
     BenchSuiteCollectZgcPhases::boxed,
+    BenchSuiteCollectZgcGcSummary::boxed,
     BenchSuiteCollectG1Phases::boxed,
     BenchSuiteCollectGitInfo::boxed,
     BenchSuiteCollectZgcTask::boxed,
     BenchSuiteCollectZgcStats::boxed,
 ];
 
-const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 12] = [
+const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectJavaThreads::boxed,
@@ -64,11 +67,28 @@ const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 12] = [
     BenchSuiteCollectSystemLoad::boxed,
     BenchSuiteCollectThreadstat::boxed,
     BenchSuiteCollectZgcPhases::boxed,
+    BenchSuiteCollectZgcGcSummary::boxed,
     BenchSuiteCollectG1Phases::boxed,
     BenchSuiteCollectGitInfo::boxed,
     BenchSuiteCollectMarkAbuse::boxed,
     BenchSuiteCollectZgcTask::boxed,
     BenchSuiteCollectZgcStats::boxed,
+];
+
+const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
+    BenchSuiteCollectConfig::boxed,
+    BenchSuiteCollectTime::boxed,
+    BenchSuiteCollectJavaThreads::boxed,
+    BenchSuiteCollectStatus::boxed,
+    BenchSuiteCollectSystemLoad::boxed,
+    BenchSuiteCollectThreadstat::boxed,
+    BenchSuiteCollectZgcPhases::boxed,
+    BenchSuiteCollectZgcGcSummary::boxed,
+    BenchSuiteCollectG1Phases::boxed,
+    BenchSuiteCollectGitInfo::boxed,
+    BenchSuiteCollectZgcTask::boxed,
+    BenchSuiteCollectZgcStats::boxed,
+    BenchSuiteCollectSpecjbb::boxed,
 ];
 
 type CreateCollectorFunction = fn() -> Box<dyn BenchSuiteCollect>;
@@ -81,6 +101,7 @@ pub fn get_collect_config(bench: &str) -> Result<&'static [CreateCollectorFuncti
     Ok(match bench {
         "dacapo_samples2" => &DACAPO_SAMPLES2_CONFIG,
         "mark_abuse" => &MARK_ABUSE_CONFIG,
+        "specjbb" => &SPECJBB_CONFIG,
         _ => return Err(InvalidBenchmark::new(bench.to_string())),
     })
 }

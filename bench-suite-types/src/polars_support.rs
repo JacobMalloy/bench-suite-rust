@@ -38,6 +38,15 @@ impl ToSeriesColumn for u64 {
     }
 }
 
+impl ToSeriesColumn for u8 {
+    fn to_series_column(&self, name: PlSmallStr) -> Series {
+        UInt8Chunked::from_slice(name, slice::from_ref(self)).into_series()
+    }
+    fn get_null(name: PlSmallStr) -> Series {
+        Series::full_null(name, 1, &DataType::UInt8)
+    }
+}
+
 impl ToSeriesColumn for f64 {
     fn to_series_column(&self, name: PlSmallStr) -> Series {
         Float64Chunked::from_slice(name, slice::from_ref(self)).into_series()

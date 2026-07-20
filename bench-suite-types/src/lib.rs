@@ -133,6 +133,13 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     dacapo_threads:NonZero<u64>,
     dacapo_harness:Intern,
 
+    //specjbb
+    specjbb_location:Intern,
+    specjbb_props:Intern,
+    specjbb_opts:Intern,
+    specjbb_args:Intern,
+    specjbb_report_level:u8,
+
     //mark abuse
     mark_abuse_location:Intern,
     mark_abuse_cardinality:NonZero<u64>,

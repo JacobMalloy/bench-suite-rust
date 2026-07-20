@@ -5,7 +5,7 @@ members = [
 ]
 
 [workspace.dependencies]
-polars = {version="0.x", default-features=false, features=["csv", "parquet","performant","lazy"]}
+polars = {version="0.53", default-features=false, features=["csv", "parquet","performant","lazy"]}
 anyhow = "1.0.x"
 serde = { version = "1.0.x",features=["derive"]}
 string-intern = {git="https://github.com/JacobMalloy/string-intern.git"}

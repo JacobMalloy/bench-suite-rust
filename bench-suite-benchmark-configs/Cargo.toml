@@ -12,6 +12,7 @@ bench-suite-collector-time = {path = "../collectors/bench-suite-collector-time/"
 bench-suite-collector-dacapo-iteration = {path = "../collectors/bench-suite-collector-dacapo-iteration/"}
 bench-suite-collector-dacapo-latency = {path = "../collectors/bench-suite-collector-dacapo-latency/"}
 bench-suite-collector-zgc-phases = {path = "../collectors/bench-suite-collector-zgc-phases/"}
+bench-suite-collector-zgc-gc-summary = {path = "../collectors/bench-suite-collector-zgc-gc-summary/"}
 bench-suite-collector-g1-phases = {path = "../collectors/bench-suite-collector-g1-phases/"}
 bench-suite-collector-git-info = {path = "../collectors/bench-suite-collector-git-info/"}
 bench-suite-collector-mark-abuse = {path = "../collectors/bench-suite-collector-mark-abuse/"}
@@ -21,4 +22,5 @@ bench-suite-collector-java-threads = {path = "../collectors/bench-suite-collecto
 bench-suite-collector-status = {path = "../collectors/bench-suite-collector-status/"}
 bench-suite-collector-threadstat = {path = "../collectors/bench-suite-collector-threadstat/"}
 bench-suite-collector-system-load = {path = "../collectors/bench-suite-collector-system-load/"}
+bench-suite-collector-specjbb = {path = "../collectors/bench-suite-collector-specjbb/"}
 bench-suite-collect-results = {path = "../bench-suite-collect-results/"}
