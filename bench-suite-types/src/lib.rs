@@ -116,6 +116,12 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 
     zgc_deactivate_proactive:bool,
 
+    opp_zgc:bool,
+    opp_zgc_period:NonZero<u64>,
+    opp_zgc_minor_threshold:u64,
+    opp_zgc_major_threshold:u64,
+    opp_zgc_avg_cpu_window:NonZero<u64>,
+
     java_thp:bool,
 
     ResctrlIdleGCMask:NonZero<u64>,
@@ -156,6 +162,7 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     threadstat_location:Intern,
     threadstat_wrapper_location:Intern,
     threadstat_event:Intern,
+    threadstat_frequency:NonZero<u64>,
 
     //cos
     cos_config:Intern,
