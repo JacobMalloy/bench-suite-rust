@@ -4,10 +4,12 @@ use polars::prelude::*;
 use polars_core::frame::chunk_df_for_writing;
 use polars_parquet::read::ParquetError;
 use polars_parquet::write::{
-    Compressor, CompressionOptions, DynIter, DynStreamingIterator, Encoding,
-    FallibleStreamingIterator, FileWriter, StatisticsOptions, Version, WriteOptions,
-    array_to_columns, get_dtype_encoding, to_parquet_schema,
+    Compressor, DynIter, DynStreamingIterator, Encoding, FallibleStreamingIterator, FileWriter,
+    StatisticsOptions, Version, WriteOptions, array_to_columns, get_dtype_encoding,
+    to_parquet_schema,
 };
+
+pub use polars_parquet::write::{CompressionOptions, ZstdLevel};
 
 /// Writes `df` to `writer` as a single Parquet file, driving `polars-parquet`'s
 /// writer directly instead of going through `polars_io::ParquetWriter`.

@@ -8,6 +8,7 @@ pedantic = "warn"
 
 [dependencies]
 polars = {workspace = true}
+polars-parquet = {workspace = true}
 anyhow = {workspace = true}
 
 bench-suite-types = {path = "../bench-suite-types"}

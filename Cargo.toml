@@ -6,6 +6,10 @@ members = [
 
 [workspace.dependencies]
 polars = {version="0.53", default-features=false, features=["csv", "parquet","performant","lazy"]}
+# polars subcrates are published in lockstep with polars; keep this version in sync with it.
+polars-core = {version="0.53", default-features=false}
+polars-io = {version="0.53", default-features=false}
+polars-parquet = {version="0.53", default-features=false}
 anyhow = "1.0.x"
 serde = { version = "1.0.x",features=["derive"]}
 string-intern = {git="https://github.com/JacobMalloy/string-intern.git"}
