@@ -4,6 +4,7 @@ use bench_suite_collector_dacapo_iteration::BenchSuiteCollectDacapoIteration;
 use bench_suite_collector_dacapo_latency::BenchSuiteCollectDacapoLatency;
 use bench_suite_collector_g1_phases::BenchSuiteCollectG1Phases;
 use bench_suite_collector_git_info::BenchSuiteCollectGitInfo;
+use bench_suite_collector_hazelcast_jet::BenchSuiteCollectHazelcastJet;
 use bench_suite_collector_java_threads::BenchSuiteCollectJavaThreads;
 use bench_suite_collector_mark_abuse::BenchSuiteCollectMarkAbuse;
 use bench_suite_collector_specjbb::BenchSuiteCollectSpecjbb;
@@ -91,6 +92,22 @@ const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
     BenchSuiteCollectSpecjbb::boxed,
 ];
 
+const HAZELCAST_JET_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
+    BenchSuiteCollectConfig::boxed,
+    BenchSuiteCollectTime::boxed,
+    BenchSuiteCollectJavaThreads::boxed,
+    BenchSuiteCollectStatus::boxed,
+    BenchSuiteCollectSystemLoad::boxed,
+    BenchSuiteCollectThreadstat::boxed,
+    BenchSuiteCollectZgcPhases::boxed,
+    BenchSuiteCollectZgcGcSummary::boxed,
+    BenchSuiteCollectG1Phases::boxed,
+    BenchSuiteCollectGitInfo::boxed,
+    BenchSuiteCollectZgcTask::boxed,
+    BenchSuiteCollectZgcStats::boxed,
+    BenchSuiteCollectHazelcastJet::boxed,
+];
+
 type CreateCollectorFunction = fn() -> Box<dyn BenchSuiteCollect>;
 
 /// Get the Collect Config for a benchmark name
@@ -102,6 +119,7 @@ pub fn get_collect_config(bench: &str) -> Result<&'static [CreateCollectorFuncti
         "dacapo_samples2" => &DACAPO_SAMPLES2_CONFIG,
         "mark_abuse" => &MARK_ABUSE_CONFIG,
         "specjbb" => &SPECJBB_CONFIG,
+        "hazelcast_jet" => &HAZELCAST_JET_CONFIG,
         _ => return Err(InvalidBenchmark::new(bench.to_string())),
     })
 }

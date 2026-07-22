@@ -23,4 +23,5 @@ bench-suite-collector-status = {path = "../collectors/bench-suite-collector-stat
 bench-suite-collector-threadstat = {path = "../collectors/bench-suite-collector-threadstat/"}
 bench-suite-collector-system-load = {path = "../collectors/bench-suite-collector-system-load/"}
 bench-suite-collector-specjbb = {path = "../collectors/bench-suite-collector-specjbb/"}
+bench-suite-collector-hazelcast-jet = {path = "../collectors/bench-suite-collector-hazelcast-jet/"}
 bench-suite-collect-results = {path = "../bench-suite-collect-results/"}

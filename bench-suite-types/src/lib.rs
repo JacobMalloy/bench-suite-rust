@@ -168,5 +168,12 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     cos_config:Intern,
     cache_ways:NonZero<u64>,
 
+    //hazelcast jet
+    jet_gc_benchmark_location:Intern,
+    jet_num_keys:NonZero<u64>,
+    jet_items_per_second:NonZero<u64>,
+    jet_win_size_millis:NonZero<u64>,
+    jet_sliding_step_millis:NonZero<u64>,
+    hazelcast_time_s:NonZero<u64>,
 
 });

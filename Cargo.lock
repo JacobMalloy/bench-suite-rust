@@ -191,6 +191,7 @@ dependencies = [
  "bench-suite-collector-dacapo-latency",
  "bench-suite-collector-g1-phases",
  "bench-suite-collector-git-info",
+ "bench-suite-collector-hazelcast-jet",
  "bench-suite-collector-java-threads",
  "bench-suite-collector-mark-abuse",
  "bench-suite-collector-specjbb",
@@ -288,6 +289,18 @@ dependencies = [
  "bench-suite-collect-results",
  "bench-suite-types",
  "polars",
+ "string-intern",
+]
+
+[[package]]
+name = "bench-suite-collector-hazelcast-jet"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-collect-results",
+ "bench-suite-types",
+ "polars",
+ "regex",
  "string-intern",
 ]
 
