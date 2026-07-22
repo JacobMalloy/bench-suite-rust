@@ -1,5 +1,7 @@
 use polars::prelude::*;
 
+pub mod export;
+
 /// Shrinks integer columns in a `DataFrame` to the smallest fitting integer type.
 ///
 /// # Errors
