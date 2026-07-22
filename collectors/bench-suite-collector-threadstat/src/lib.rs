@@ -1,5 +1,5 @@
 use anyhow::Context;
-use bench_suite_collect_results::BenchSuiteCollect;
+use bench_suite_collect_results::{BenchSuiteCollect, ColumnEncoding, Encoding};
 use polars::prelude::*;
 use std::sync::LazyLock;
 use string_intern::Intern;
@@ -139,5 +139,15 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
             rv.push((Intern::from_static("threadstat_read"), lf));
         }
         Ok(rv)
+    }
+
+    fn column_encoding(&self) -> ColumnEncoding {
+        // event_id, read_id and timestamp are monotonically increasing across
+        // threadstat's large event/read tables, so delta encoding shrinks them
+        // dramatically versus Polars' default dictionary/plain choice.
+        |name| match name {
+            "event_id" | "read_id" | "timestamp" => Some(Encoding::DeltaBinaryPacked),
+            _ => None,
+        }
     }
 }

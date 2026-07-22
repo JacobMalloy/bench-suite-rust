@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use crossbeam::channel;
-use polars::polars_utils::compression::ZstdLevel;
 use polars::prelude::*;
+use polars_helpers::export::{CompressionOptions, ZstdLevel, write_parquet};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{self, File};
@@ -12,7 +12,7 @@ use std::thread;
 
 use string_intern::Intern;
 
-use bench_suite_collect_results::{BenchSuiteCollect, FileInfo};
+use bench_suite_collect_results::{BenchSuiteCollect, ColumnEncoding, FileInfo};
 use bench_suite_config::BenchSuiteTasks;
 use bench_suite_types::BenchSuiteRun;
 
@@ -52,7 +52,7 @@ struct DatabaseLocation {
     db_name: Intern,
 }
 
-type ParquetSubmit = (String, DataFrame);
+type ParquetSubmit = (String, DataFrame, ColumnEncoding);
 type LazyFrameSendChannel = mpsc::SyncSender<LazyFrame>;
 
 #[derive(Clone)]
@@ -69,6 +69,7 @@ fn parquet_thread(
     rx: &std::sync::mpsc::Receiver<LazyFrame>,
     location: &Path,
     write_channel: &channel::Sender<ParquetSubmit>,
+    encoding: ColumnEncoding,
 ) {
     let mut index: u64 = 0;
     let mut data: Option<DataFrame> = None;
@@ -86,7 +87,11 @@ fn parquet_thread(
             if df.estimated_size() >= 750 * 1024 * 1024 {
                 df = polars_helpers::shrink_int_columns(&df).unwrap();
                 write_channel
-                    .send((format!("{}_{}.parquet", location.display(), index), df))
+                    .send((
+                        format!("{}_{}.parquet", location.display(), index),
+                        df,
+                        encoding,
+                    ))
                     .unwrap();
                 index += 1;
                 None
@@ -100,21 +105,25 @@ fn parquet_thread(
     if let Some(mut df) = data {
         df = polars_helpers::shrink_int_columns(&df).unwrap();
         write_channel
-            .send((format!("{}_{}.parquet", location.display(), index), df))
+            .send((
+                format!("{}_{}.parquet", location.display(), index),
+                df,
+                encoding,
+            ))
             .unwrap();
     }
 }
 
 fn parquet_write_thread(inputs: channel::Receiver<ParquetSubmit>) {
-    for (s, mut df) in inputs {
-        ParquetWriter::new(File::create(s).unwrap())
-            .with_compression(ParquetCompression::Zstd(Some(
-                ZstdLevel::try_new(18).unwrap(),
-            )))
-            .with_statistics(StatisticsOptions::default())
-            .with_row_group_size(Some(1_000_000))
-            .finish(&mut df)
-            .unwrap();
+    for (s, mut df, encoding) in inputs {
+        write_parquet(
+            &mut df,
+            File::create(s).unwrap(),
+            CompressionOptions::Zstd(Some(ZstdLevel::try_new(18).unwrap())),
+            Some(1_000_000),
+            encoding,
+        )
+        .unwrap();
     }
 }
 
@@ -123,6 +132,7 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
         &mut self,
         key: DatabaseLocation,
         value: LazyFrame,
+        encoding: ColumnEncoding,
     ) -> std::result::Result<(), Box<std::sync::mpsc::SendError<LazyFrame>>> {
         if self.drop_tables.contains(&key.db_name) {
             return Ok(());
@@ -143,7 +153,7 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
                             let path = Path::new(base_location)
                                 .join(key.directory)
                                 .join(key.db_name);
-                            parquet_thread(&rx, &path, &submit);
+                            parquet_thread(&rx, &path, &submit, encoding);
                         })
                         .unwrap();
                     tx
@@ -169,7 +179,10 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
     }
 }
 
-fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, LazyFrame>> {
+fn process_run(
+    run: &BenchSuiteRun,
+    tar_path: &Path,
+) -> Result<HashMap<Intern, (LazyFrame, ColumnEncoding)>> {
     let tarfile = BufReader::new(File::open(tar_path)?);
     let tarfile = xz2::read::XzDecoder::new(tarfile);
     let mut tarfile = tar::Archive::new(tarfile);
@@ -205,12 +218,13 @@ fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, L
 
     drop(tarfile);
 
-    let mut return_map: HashMap<Intern, LazyFrame> = HashMap::new();
+    let mut return_map: HashMap<Intern, (LazyFrame, ColumnEncoding)> = HashMap::new();
     for collector in collectors {
+        let encoding = collector.column_encoding();
         match BenchSuiteCollect::get_result(collector, run) {
             Ok(results) => {
                 for (key, val) in results {
-                    if return_map.insert(key, val).is_some() {
+                    if return_map.insert(key, (val, encoding)).is_some() {
                         return Err(anyhow!(std::format!("Repeated the table name ")));
                     }
                 }
@@ -226,7 +240,11 @@ fn process_run(run: &BenchSuiteRun, tar_path: &Path) -> Result<HashMap<Intern, L
         let parse_status_df = df![
             "message" => &parsing_issues,
         ]?;
-        return_map.insert(Intern::from_static("parse_status"), parse_status_df.lazy());
+        let no_encoding: ColumnEncoding = |_| None;
+        return_map.insert(
+            Intern::from_static("parse_status"),
+            (parse_status_df.lazy(), no_encoding),
+        );
     }
 
     Ok(return_map)
@@ -245,11 +263,15 @@ where
                     "message" => &[format!("{e:?}")],
                 ]
                 .unwrap();
-                HashMap::from([(Intern::new("parse_status"), parse_status_df.lazy())])
+                let no_encoding: ColumnEncoding = |_| None;
+                HashMap::from([(
+                    Intern::new("parse_status"),
+                    (parse_status_df.lazy(), no_encoding),
+                )])
             }
         };
 
-        for (key, mut val) in map {
+        for (key, (mut val, encoding)) in map {
             val = val.with_column(lit(id).alias("id"));
             if let Some((last, remaining)) = paths.split_last() {
                 for p in remaining {
@@ -260,6 +282,7 @@ where
                                 db_name: key,
                             },
                             val.clone(),
+                            encoding,
                         )
                         .unwrap();
                 }
@@ -270,6 +293,7 @@ where
                             db_name: key,
                         },
                         val,
+                        encoding,
                     )
                     .unwrap();
             }

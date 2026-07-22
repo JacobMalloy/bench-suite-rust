@@ -231,6 +231,7 @@ dependencies = [
  "bench-suite-types",
  "lazy-read",
  "polars",
+ "polars-parquet",
  "string-intern",
 ]
 
