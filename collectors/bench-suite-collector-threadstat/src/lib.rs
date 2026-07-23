@@ -130,6 +130,9 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
         if let Some(lf) = self.event {
+            // Sort so `count` increases row-to-row within each event_id, which
+            // makes it (and the ids) delta-encodable — see `column_encoding`.
+            let lf = lf.sort(["event_id", "read_id"], SortMultipleOptions::default());
             rv.push((Intern::from_static("threadstat_event"), lf));
         }
         if let Some(lf) = self.counter_description {
@@ -142,11 +145,14 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
     }
 
     fn column_encoding(&self) -> ColumnEncoding {
-        // event_id, read_id and timestamp are monotonically increasing across
-        // threadstat's large event/read tables, so delta encoding shrinks them
-        // dramatically versus Polars' default dictionary/plain choice.
+        // event_id/read_id are already monotonic; `count` becomes monotonic per
+        // event_id once the event table is sorted (in `get_result`), so delta
+        // crushes all three (~3x on the event table). `timestamp` in the read
+        // table is monotonic in natural read order. `time_running`/`time_enabled`
+        // are deliberately left alone: they are multiplexed perf times with no
+        // clustering key available, and delta makes them larger than dictionary.
         |name| match name {
-            "event_id" | "read_id" | "timestamp" => Some(Encoding::DeltaBinaryPacked),
+            "event_id" | "read_id" | "timestamp" | "count" => Some(Encoding::DeltaBinaryPacked),
             _ => None,
         }
     }
