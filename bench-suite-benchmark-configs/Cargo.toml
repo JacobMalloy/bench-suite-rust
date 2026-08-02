@@ -11,6 +11,8 @@ bench-suite-collector-config = {path = "../collectors/bench-suite-collector-conf
 bench-suite-collector-time = {path = "../collectors/bench-suite-collector-time/"}
 bench-suite-collector-dacapo-iteration = {path = "../collectors/bench-suite-collector-dacapo-iteration/"}
 bench-suite-collector-dacapo-latency = {path = "../collectors/bench-suite-collector-dacapo-latency/"}
+bench-suite-collector-dacapo-latency-summary = {path = "../collectors/bench-suite-collector-dacapo-latency-summary/"}
+bench-suite-collector-java-options = {path = "../collectors/bench-suite-collector-java-options/"}
 bench-suite-collector-zgc-phases = {path = "../collectors/bench-suite-collector-zgc-phases/"}
 bench-suite-collector-zgc-gc-summary = {path = "../collectors/bench-suite-collector-zgc-gc-summary/"}
 bench-suite-collector-g1-phases = {path = "../collectors/bench-suite-collector-g1-phases/"}

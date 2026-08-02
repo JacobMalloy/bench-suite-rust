@@ -2,9 +2,11 @@ use bench_suite_collect_results::BenchSuiteCollect;
 use bench_suite_collector_config::BenchSuiteCollectConfig;
 use bench_suite_collector_dacapo_iteration::BenchSuiteCollectDacapoIteration;
 use bench_suite_collector_dacapo_latency::BenchSuiteCollectDacapoLatency;
+use bench_suite_collector_dacapo_latency_summary::BenchSuiteCollectDacapoLatencySummary;
 use bench_suite_collector_g1_phases::BenchSuiteCollectG1Phases;
 use bench_suite_collector_git_info::BenchSuiteCollectGitInfo;
 use bench_suite_collector_hazelcast_jet::BenchSuiteCollectHazelcastJet;
+use bench_suite_collector_java_options::BenchSuiteCollectJavaOptions;
 use bench_suite_collector_java_threads::BenchSuiteCollectJavaThreads;
 use bench_suite_collector_mark_abuse::BenchSuiteCollectMarkAbuse;
 use bench_suite_collector_specjbb::BenchSuiteCollectSpecjbb;
@@ -43,11 +45,13 @@ impl std::fmt::Display for InvalidBenchmark {
 
 impl std::error::Error for InvalidBenchmark {}
 
-const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
+const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 16] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectDacapoIteration::boxed,
     BenchSuiteCollectDacapoLatency::boxed,
+    BenchSuiteCollectDacapoLatencySummary::boxed,
+    BenchSuiteCollectJavaOptions::boxed,
     BenchSuiteCollectJavaThreads::boxed,
     BenchSuiteCollectStatus::boxed,
     BenchSuiteCollectSystemLoad::boxed,
@@ -60,9 +64,10 @@ const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
     BenchSuiteCollectZgcStats::boxed,
 ];
 
-const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
+const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
+    BenchSuiteCollectJavaOptions::boxed,
     BenchSuiteCollectJavaThreads::boxed,
     BenchSuiteCollectStatus::boxed,
     BenchSuiteCollectSystemLoad::boxed,
@@ -76,9 +81,10 @@ const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
     BenchSuiteCollectZgcStats::boxed,
 ];
 
-const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
+const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
+    BenchSuiteCollectJavaOptions::boxed,
     BenchSuiteCollectJavaThreads::boxed,
     BenchSuiteCollectStatus::boxed,
     BenchSuiteCollectSystemLoad::boxed,
