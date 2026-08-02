@@ -8,12 +8,15 @@ use string_intern::Intern;
 
 pub use polars_parquet::write::Encoding;
 
-/// Per-column Parquet encoding override, keyed by column name.
+/// Per-column Parquet encoding override, keyed by table name and column name.
 ///
-/// Returning `Some(encoding)` forces that encoding for the named column;
-/// `None` keeps Polars' automatic choice. A plain `fn` pointer (not a closure)
-/// so it is `Copy` and can travel through the collection pipeline cheaply.
-pub type ColumnEncoding = fn(&str) -> Option<Encoding>;
+/// Returning `Some(encoding)` forces that encoding for the named column of
+/// the named table; `None` keeps Polars' automatic choice. Table-scoped so a
+/// collector that emits several tables (e.g. one column name reused across
+/// two of them) can't have a hint for one table bleed into another. A plain
+/// `fn` pointer (not a closure) so it is `Copy` and can travel through the
+/// collection pipeline cheaply.
+pub type ColumnEncoding = fn(table: Intern, column: &str) -> Option<Encoding>;
 
 pub trait FileInfoInterface {
     fn name(&self) -> &str;
@@ -94,10 +97,10 @@ pub trait BenchSuiteCollect {
     /// Returns `Err` if the collected data cannot be assembled into a `LazyFrame`.
     fn get_result(self: Box<Self>, config: &BenchSuiteRun) -> Result<Vec<(Intern, LazyFrame)>>;
 
-    /// Per-column Parquet encoding override applied to every table this
-    /// collector produces. The default forces no encoding, matching Polars'
-    /// automatic behavior.
+    /// Per-column Parquet encoding override, consulted for every table this
+    /// collector produces. The default forces no encoding for any table,
+    /// matching Polars' automatic behavior.
     fn column_encoding(&self) -> ColumnEncoding {
-        |_| None
+        |_, _| None
     }
 }

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use crossbeam::channel;
 use polars::prelude::*;
-use polars_helpers::export::{CompressionOptions, ZstdLevel, write_parquet};
+use polars_helpers::export::{CompressionOptions, ResolvedSchema, ZstdLevel, write_parquet};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{self, File};
@@ -52,8 +52,32 @@ struct DatabaseLocation {
     db_name: Intern,
 }
 
-type ParquetSubmit = (String, DataFrame, ColumnEncoding);
+type ParquetSubmit = (String, DataFrame, Arc<ResolvedSchema>);
 type LazyFrameSendChannel = mpsc::SyncSender<LazyFrame>;
+
+/// Reuses `cache`'s resolved schema for `df` if it still applies (same
+/// column set/types as last time), otherwise resolves and caches a fresh one.
+///
+/// One `parquet_thread` handles every shard of a single table, so `cache`
+/// lives for that table's whole run: in the common case where a table's
+/// shards all land on the same shape (e.g. `shrink_int_columns` keeps picking
+/// the same width), this resolves the Arrow/Parquet schema once per table
+/// instead of once per shard written.
+fn resolve_schema_cached(
+    df: &DataFrame,
+    table: Intern,
+    encoding: ColumnEncoding,
+    cache: &mut Option<Arc<ResolvedSchema>>,
+) -> Arc<ResolvedSchema> {
+    if let Some(resolved) = cache
+        && resolved.matches(df.schema())
+    {
+        return resolved.clone();
+    }
+    let resolved = Arc::new(ResolvedSchema::resolve(df.schema(), |col| encoding(table, col)).unwrap());
+    *cache = Some(resolved.clone());
+    resolved
+}
 
 #[derive(Clone)]
 struct TableSubmitter<'scope, 'env> {
@@ -69,10 +93,15 @@ fn parquet_thread(
     rx: &std::sync::mpsc::Receiver<LazyFrame>,
     location: &Path,
     write_channel: &channel::Sender<ParquetSubmit>,
+    table: Intern,
     encoding: ColumnEncoding,
 ) {
     let mut index: u64 = 0;
     let mut data: Option<DataFrame> = None;
+    // Lives for this thread's whole run - one per table (see `submit`) - so it
+    // carries the resolved schema across every shard of this table instead of
+    // it being rederived per shard inside `write_parquet`.
+    let mut schema_cache: Option<Arc<ResolvedSchema>> = None;
     while let Ok(msg) = rx.recv() {
         match &mut data {
             Some(v) => {
@@ -86,11 +115,12 @@ fn parquet_thread(
         data = if let Some(mut df) = data.take() {
             if df.estimated_size() >= 750 * 1024 * 1024 {
                 df = polars_helpers::shrink_int_columns(&df).unwrap();
+                let schema = resolve_schema_cached(&df, table, encoding, &mut schema_cache);
                 write_channel
                     .send((
                         format!("{}_{}.parquet", location.display(), index),
                         df,
-                        encoding,
+                        schema,
                     ))
                     .unwrap();
                 index += 1;
@@ -104,24 +134,25 @@ fn parquet_thread(
     }
     if let Some(mut df) = data {
         df = polars_helpers::shrink_int_columns(&df).unwrap();
+        let schema = resolve_schema_cached(&df, table, encoding, &mut schema_cache);
         write_channel
             .send((
                 format!("{}_{}.parquet", location.display(), index),
                 df,
-                encoding,
+                schema,
             ))
             .unwrap();
     }
 }
 
 fn parquet_write_thread(inputs: channel::Receiver<ParquetSubmit>) {
-    for (s, mut df, encoding) in inputs {
+    for (s, mut df, schema) in inputs {
         write_parquet(
             &mut df,
             File::create(s).unwrap(),
             CompressionOptions::Zstd(Some(ZstdLevel::try_new(18).unwrap())),
             Some(1_000_000),
-            encoding,
+            &schema,
         )
         .unwrap();
     }
@@ -153,7 +184,7 @@ impl<'scope, 'env> TableSubmitter<'scope, 'env> {
                             let path = Path::new(base_location)
                                 .join(key.directory)
                                 .join(key.db_name);
-                            parquet_thread(&rx, &path, &submit, encoding);
+                            parquet_thread(&rx, &path, &submit, key.db_name, encoding);
                         })
                         .unwrap();
                     tx
@@ -240,7 +271,7 @@ fn process_run(
         let parse_status_df = df![
             "message" => &parsing_issues,
         ]?;
-        let no_encoding: ColumnEncoding = |_| None;
+        let no_encoding: ColumnEncoding = |_, _| None;
         return_map.insert(
             Intern::from_static("parse_status"),
             (parse_status_df.lazy(), no_encoding),
@@ -263,7 +294,7 @@ where
                     "message" => &[format!("{e:?}")],
                 ]
                 .unwrap();
-                let no_encoding: ColumnEncoding = |_| None;
+                let no_encoding: ColumnEncoding = |_, _| None;
                 HashMap::from([(
                     Intern::new("parse_status"),
                     (parse_status_df.lazy(), no_encoding),

@@ -151,8 +151,15 @@ impl BenchSuiteCollect for BenchSuiteCollectThreadstat {
         // table is monotonic in natural read order. `time_running`/`time_enabled`
         // are deliberately left alone: they are multiplexed perf times with no
         // clustering key available, and delta makes them larger than dictionary.
-        |name| match name {
-            "event_id" | "read_id" | "timestamp" | "count" => Some(Encoding::DeltaBinaryPacked),
+        //
+        // Scoped per table (not just per column name) so `threadstat_event`'s
+        // `event_id` doesn't accidentally also force encoding on some future
+        // unrelated table's `event_id` column.
+        |table, column| match (table.as_str(), column) {
+            ("threadstat_event", "event_id" | "read_id" | "count") => {
+                Some(Encoding::DeltaBinaryPacked)
+            }
+            ("threadstat_read", "timestamp") => Some(Encoding::DeltaBinaryPacked),
             _ => None,
         }
     }
