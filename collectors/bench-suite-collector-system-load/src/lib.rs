@@ -1,5 +1,5 @@
 use anyhow::Context;
-use bench_suite_collect_results::BenchSuiteCollect;
+use bench_suite_collect_results::{BenchSuiteCollect, ColumnEncoding, Encoding};
 use polars::prelude::*;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -118,5 +118,27 @@ impl BenchSuiteCollect for BenchSuiteCollectSystemLoad {
             *v = tmp.filter(col("CPU").neq(lit(-1)));
         }
         Ok(self.tables.into_iter().collect())
+    }
+
+    fn column_encoding(&self) -> ColumnEncoding {
+        // Table names here are dynamic (derived from whatever sadf files are
+        // present - see `process_file`), so this only names the specific
+        // table/column pairs worth hinting rather than trying to enumerate
+        // every table this collector could ever produce; anything else falls
+        // through to `None`, same as `DROP_VALS` above for drop-columns.
+        //
+        // memory_sadf's free/available/used/active memory drift by small
+        // amounts sample-to-sample within a run; measured ~2-2.8x smaller
+        // with delta.
+        |table, column| {
+            matches!(
+                (table.as_str(), column),
+                (
+                    "memory_sadf",
+                    "kbmemfree" | "kbavail" | "kbmemused" | "kbbuffers" | "kbactive"
+                )
+            )
+            .then_some(Encoding::DeltaBinaryPacked)
+        }
     }
 }

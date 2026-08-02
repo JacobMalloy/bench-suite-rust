@@ -1,5 +1,5 @@
 use anyhow::Context;
-use bench_suite_collect_results::BenchSuiteCollect;
+use bench_suite_collect_results::{BenchSuiteCollect, ColumnEncoding, Encoding};
 use polars::prelude::*;
 use regex::Regex;
 use std::sync::LazyLock;
@@ -187,6 +187,17 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
             rv.push((Intern::from_static("specjbb_profile"), lf));
         }
         Ok(rv)
+    }
+
+    fn column_encoding(&self) -> ColumnEncoding {
+        // `total_passed_requests` is a running total in `specjbb_profile` -
+        // small steps within a run, punctuated by a jump at each run boundary.
+        // Measured ~1.61x smaller with delta. Scoped to that table since
+        // `specjbb_summary` isn't shaped the same way.
+        |table, column| {
+            (table.as_str() == "specjbb_profile" && column == "total_passed_requests")
+                .then_some(Encoding::DeltaBinaryPacked)
+        }
     }
 }
 

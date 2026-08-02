@@ -1,5 +1,5 @@
 use anyhow::Context;
-use bench_suite_collect_results::BenchSuiteCollect;
+use bench_suite_collect_results::{BenchSuiteCollect, ColumnEncoding, Encoding};
 use polars::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
@@ -100,5 +100,14 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
                 (name, lf)
             })
             .collect())
+    }
+
+    fn column_encoding(&self) -> ColumnEncoding {
+        // Every table this collector emits (one per `dacapo_latency_<file_type>`)
+        // shares the same schema, so matching on column name alone is safe here -
+        // there's no other table with a differently-meaning `start_ns` to collide
+        // with. Within-run `start_ns` values climb in small steps punctuated by a
+        // jump at each run boundary; measured ~1.65x smaller with delta.
+        |_table, column| (column == "start_ns").then_some(Encoding::DeltaBinaryPacked)
     }
 }

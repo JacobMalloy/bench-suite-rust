@@ -1,5 +1,5 @@
 use anyhow::Context;
-use bench_suite_collect_results::BenchSuiteCollect;
+use bench_suite_collect_results::{BenchSuiteCollect, ColumnEncoding, Encoding};
 use polars::prelude::*;
 use regex::Regex;
 use std::sync::LazyLock;
@@ -142,5 +142,12 @@ impl BenchSuiteCollect for BenchSuiteCollectZgcPhases {
             rv.push((Intern::from_static("zgc_phases"), lf));
         }
         Ok(rv)
+    }
+
+    fn column_encoding(&self) -> ColumnEncoding {
+        // This collector only ever emits `zgc_phases`, so matching on column
+        // name alone is safe. `gc_number` is small and dense within a run;
+        // measured ~2.56x smaller with delta.
+        |_table, column| (column == "gc_number").then_some(Encoding::DeltaBinaryPacked)
     }
 }
