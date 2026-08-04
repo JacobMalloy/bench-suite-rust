@@ -15,6 +15,7 @@ use bench_suite_collector_system_load::BenchSuiteCollectSystemLoad;
 use bench_suite_collector_threadstat::BenchSuiteCollectThreadstat;
 use bench_suite_collector_time::BenchSuiteCollectTime;
 use bench_suite_collector_zgc_gc_summary::BenchSuiteCollectZgcGcSummary;
+use bench_suite_collector_zgc_heap_stats::BenchSuiteCollectZgcHeapStats;
 use bench_suite_collector_zgc_phases::BenchSuiteCollectZgcPhases;
 use bench_suite_collector_zgc_stats::BenchSuiteCollectZgcStats;
 use bench_suite_collector_zgc_task::BenchSuiteCollectZgcTask;
@@ -45,7 +46,7 @@ impl std::fmt::Display for InvalidBenchmark {
 
 impl std::error::Error for InvalidBenchmark {}
 
-const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 16] = [
+const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 17] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectDacapoIteration::boxed,
@@ -62,9 +63,10 @@ const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 16] = [
     BenchSuiteCollectGitInfo::boxed,
     BenchSuiteCollectZgcTask::boxed,
     BenchSuiteCollectZgcStats::boxed,
+    BenchSuiteCollectZgcHeapStats::boxed,
 ];
 
-const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
+const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 15] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectJavaOptions::boxed,
@@ -79,9 +81,10 @@ const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
     BenchSuiteCollectMarkAbuse::boxed,
     BenchSuiteCollectZgcTask::boxed,
     BenchSuiteCollectZgcStats::boxed,
+    BenchSuiteCollectZgcHeapStats::boxed,
 ];
 
-const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
+const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 15] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectJavaOptions::boxed,
@@ -95,10 +98,11 @@ const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
     BenchSuiteCollectGitInfo::boxed,
     BenchSuiteCollectZgcTask::boxed,
     BenchSuiteCollectZgcStats::boxed,
+    BenchSuiteCollectZgcHeapStats::boxed,
     BenchSuiteCollectSpecjbb::boxed,
 ];
 
-const HAZELCAST_JET_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
+const HAZELCAST_JET_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 14] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectJavaThreads::boxed,
@@ -111,6 +115,7 @@ const HAZELCAST_JET_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 13] = [
     BenchSuiteCollectGitInfo::boxed,
     BenchSuiteCollectZgcTask::boxed,
     BenchSuiteCollectZgcStats::boxed,
+    BenchSuiteCollectZgcHeapStats::boxed,
     BenchSuiteCollectHazelcastJet::boxed,
 ];
 
