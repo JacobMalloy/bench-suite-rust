@@ -16,8 +16,8 @@ macro_rules! make_vectorized {
      optional:{$($opt_field:ident : $opt_typ:ty),* $(,)?}) => {
         #[allow(non_snake_case)]
         #[cfg_attr(feature = "serde", derive(Deserialize))]
+        #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
         #[derive(Debug, Clone, PartialEq,Hash)]
-        #[serde(deny_unknown_fields)]
         pub struct $original {
             $(pub $field: $typ),*,
             $(pub $opt_field: Option<$opt_typ>),*
@@ -110,9 +110,11 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     jdk_tiered_compilation:bool,
     zgc_barrier_use_global_variable:bool,
     zgc_barrier_rewrite_on_phase_change:bool,
+    java_active_processor_count:NonZero<u64>,
 
     GCThreadCPUs:Intern,
     NonGCThreadCPUs:Intern,
+    numactl_cpus:Intern,
 
     zgc_deactivate_proactive:bool,
 
