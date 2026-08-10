@@ -108,6 +108,12 @@ impl BenchSuiteCollect for BenchSuiteCollectDacapoLatency {
         // there's no other table with a differently-meaning `start_ns` to collide
         // with. Within-run `start_ns` values climb in small steps punctuated by a
         // jump at each run boundary; measured ~1.65x smaller with delta.
+        // `duration` isn't monotonic, so delta coding wouldn't help it, and
+        // BYTE_STREAM_SPLIT isn't implemented for integer columns by this
+        // polars-parquet version (only Plain/DeltaBinaryPacked - see
+        // `array_to_page_integer`), so it's left on Polars' automatic choice,
+        // same as `owner`/`iteration`, which already lands on RLE_DICTIONARY for
+        // their low-cardinality values.
         |_table, column| (column == "start_ns").then_some(Encoding::DeltaBinaryPacked)
     }
 }
