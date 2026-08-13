@@ -12,4 +12,6 @@ bench-suite-types = {path="../../bench-suite-types"}
 bench-suite-collect-results = {path="../../bench-suite-collect-results"}
 string-intern = {workspace = true}
 anyhow = {workspace = true}
+serde_json = {workspace = true}
+chrono = "0.4"
 regex = "1"
