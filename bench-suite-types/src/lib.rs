@@ -123,6 +123,13 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     opp_zgc_minor_threshold:u64,
     opp_zgc_major_threshold:u64,
     opp_zgc_avg_cpu_window:NonZero<u64>,
+    opp_zgc_concurrent_base_cost:PositiveNonZeroF64,
+    opp_zgc_cpu_weight:PositiveNonZeroF64,
+    opp_zgc_require_warm:bool,
+    opp_zgc_post_gc_growth:bool,
+    opp_zgc_growth_ratio:PositiveNonZeroF64,
+    opp_zgc_cpu_exponent:PositiveNonZeroF64,
+    opp_zgc_min_alloc_percent:PositiveNonZeroF64,
 
     java_thp:bool,
 
