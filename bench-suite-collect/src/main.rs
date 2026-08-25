@@ -110,16 +110,51 @@ fn determine_collection_mode(config: &BenchSuiteTasks, collection_path: &Path) -
     CollectionMode::Full
 }
 
+/// How many `stat` calls to have in flight at once while building the
+/// modified table. This work is latency-bound (each call is a blocking
+/// syscall, potentially over a network mount) rather than CPU-bound, so it
+/// benefits from far more concurrency than the CPU-bound processing pool
+/// elsewhere in this program uses.
+const MTIME_SCAN_CONCURRENCY: u64 = 64;
+
+/// Checks every id's tar file mtime against `since_ms`, in parallel: doing
+/// this sequentially can take a long time when `location` is a networked
+/// mount, since each `stat` call pays a full round trip.
 fn build_modified_table(config: &BenchSuiteTasks, since_ms: i64) -> Vec<bool> {
-    (0..config.bench_index())
-        .map(|id| {
-            let tar_path = config.tar_file_path(id);
-            match tar_mtime_ms(&tar_path) {
-                Some(mtime_ms) => mtime_ms > since_ms,
-                None => true,
-            }
+    let bench_index = config.bench_index();
+    if bench_index == 0 {
+        return Vec::new();
+    }
+
+    let thread_count = MTIME_SCAN_CONCURRENCY.min(bench_index);
+    let chunk_size = bench_index.div_ceil(thread_count);
+    let chunk_ranges = (0..thread_count)
+        .map(|t| {
+            let start = t * chunk_size;
+            (start, (start + chunk_size).min(bench_index))
         })
-        .collect()
+        .filter(|(start, end)| start < end);
+
+    std::thread::scope(|scope| {
+        chunk_ranges
+            .map(|(start, end)| {
+                scope.spawn(move || {
+                    (start..end)
+                        .map(|id| {
+                            let tar_path = config.tar_file_path(id);
+                            match tar_mtime_ms(&tar_path) {
+                                Some(mtime_ms) => mtime_ms > since_ms,
+                                None => true,
+                            }
+                        })
+                        .collect::<Vec<bool>>()
+                })
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flat_map(|handle| handle.join().unwrap())
+            .collect()
+    })
 }
 
 #[derive(Default)]
