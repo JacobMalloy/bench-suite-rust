@@ -223,6 +223,8 @@ dependencies = [
  "indicatif",
  "polars",
  "polars-helpers",
+ "serde",
+ "serde_json",
  "string-intern",
  "tar",
  "xz2",

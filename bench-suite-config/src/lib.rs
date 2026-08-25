@@ -16,6 +16,7 @@ pub struct BenchSuiteTasks {
     collections: HashMap<String, BenchSuiteConfig>,
     location: PathBuf,
     drop_tables: HashSet<Intern>,
+    bench_index: f64,
 }
 
 impl BenchSuiteTasks {
@@ -44,7 +45,7 @@ impl BenchSuiteTasks {
             serde_json::from_reader(status_reader).context("Failed to parse status file")?;
 
         let BenchSuiteStatus {
-            bench_index: _,
+            bench_index,
             benchmark_runs,
         } = status;
 
@@ -61,6 +62,7 @@ impl BenchSuiteTasks {
             collections: task_config.collect,
             location: bench_suite_location.to_path_buf(),
             drop_tables: task_config.drop_tables,
+            bench_index,
         })
     }
 
@@ -76,6 +78,16 @@ impl BenchSuiteTasks {
     #[must_use]
     pub fn get_drop_tables(&self) -> &HashSet<Intern> {
         &self.drop_tables
+    }
+
+    /// The exclusive upper bound on run ids, as tracked by `status.json`'s `bench_index`.
+    ///
+    /// Every possible run id lives in `0..bench_index`, though not every id in that
+    /// range necessarily has a tar file yet or an entry in `benchmark_runs`.
+    #[must_use]
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    pub fn bench_index(&self) -> u64 {
+        self.bench_index as u64
     }
 
     #[must_use]
