@@ -74,10 +74,6 @@ fn tar_mtime_ms(tar_path: &Path) -> Option<i64> {
     i64::try_from(ms).ok()
 }
 
-/// Builds the per-id "does this id need collecting" table described above:
-/// for every id in `0..bench_index`, mark it dirty if its tar file is missing
-/// (so the normal missing-tar error handling in `process_run` will fire) or if
-/// it exists and was modified after `since_ms`.
 /// Looks up whether `id` is marked dirty in a per-collection `modified`
 /// table. An out-of-range id (shouldn't normally happen) falls back to
 /// `default_dirty`.
@@ -110,6 +106,10 @@ fn determine_collection_mode(config: &BenchSuiteTasks, collection_path: &Path) -
     CollectionMode::Full
 }
 
+/// Builds the per-id "does this id need collecting" table: for every id in
+/// `0..bench_index`, mark it dirty if its tar file is missing (so the normal
+/// missing-tar error handling in `process_run` will fire) or if it exists and
+/// was modified after `since_ms`.
 fn build_modified_table(config: &BenchSuiteTasks, since_ms: i64) -> Vec<bool> {
     (0..config.bench_index())
         .map(|id| {
@@ -166,6 +166,12 @@ fn prune_stale_rows(collection_path: &Path, modified: &[bool]) -> Result<PruneSt
             .into_iter()
             .map(|id| id.is_none_or(|id| !is_dirty(modified, id, false)))
             .collect();
+
+        // Nothing in this particular file belongs to a dirty id - leave it
+        // on disk untouched rather than paying for a pointless rewrite.
+        if keep_mask.all() {
+            continue;
+        }
 
         df = df
             .filter(&keep_mask)
