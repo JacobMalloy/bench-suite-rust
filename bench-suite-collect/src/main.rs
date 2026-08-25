@@ -128,72 +128,125 @@ struct PruneStats {
     deleted: u64,
 }
 
-/// Before an incremental collection is reprocessed, drop any rows in its
-/// existing parquet files that belong to ids the `modified` table marked
-/// dirty - those ids are about to be recollected from their (changed) tar
-/// files, so the old rows would otherwise become duplicates alongside the
-/// new ones. A file that ends up empty is deleted outright.
-fn prune_stale_rows(collection_path: &Path, modified: &[bool]) -> Result<PruneStats> {
-    let mut stats = PruneStats::default();
-    if !modified.iter().any(|&dirty| dirty) {
-        return Ok(stats);
+impl PruneStats {
+    fn add(&mut self, other: &Self) {
+        self.rewritten += other.rewritten;
+        self.deleted += other.deleted;
+    }
+}
+
+/// Number of worker threads to use for parquet read/rewrite work: one per
+/// available CPU, since this is the CPU-bound (decompress/filter/recompress)
+/// counterpart to the I/O-bound tar mtime scan.
+fn parquet_worker_count() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
+}
+
+/// Drops any rows belonging to a dirty id out of a single existing parquet
+/// file, leaving the file untouched if none of its rows are dirty, rewriting
+/// it in place if some (but not all) rows were dropped, or deleting it
+/// outright if every row was dropped.
+fn prune_one_file(path: &Path, modified: &[bool], stats: &mut PruneStats) -> Result<()> {
+    let mut df = ParquetReader::new(BufReader::new(
+        File::open(path).context("Failed to open parquet file for pruning")?,
+    ))
+    .finish()
+    .context("Failed to read parquet file for pruning")?;
+
+    // `shrink_int_columns` (run before every parquet write) may have
+    // narrowed "id" down to whatever integer width fit, so normalize
+    // back to u64 before reading it out.
+    let id_col = df
+        .column("id")
+        .context("Existing parquet file is missing its id column")?
+        .as_materialized_series()
+        .cast(&DataType::UInt64)
+        .context("id column could not be read as an integer")?;
+    let id_col = id_col.u64().unwrap();
+    let keep_mask: BooleanChunked = id_col
+        .into_iter()
+        .map(|id| id.is_none_or(|id| !is_dirty(modified, id, false)))
+        .collect();
+
+    // Nothing in this particular file belongs to a dirty id - leave it on
+    // disk untouched rather than paying for a pointless rewrite.
+    if keep_mask.all() {
+        return Ok(());
     }
 
-    for entry in fs::read_dir(collection_path).context("Failed to read collection directory")? {
-        let entry = entry.context("Failed to read directory entry")?;
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("parquet") {
-            continue;
-        }
+    df = df
+        .filter(&keep_mask)
+        .context("Failed to filter stale rows out of parquet file")?;
 
-        let mut df = ParquetReader::new(BufReader::new(
-            File::open(&path).context("Failed to open parquet file for pruning")?,
-        ))
-        .finish()
-        .context("Failed to read parquet file for pruning")?;
-
-        // `shrink_int_columns` (run before every parquet write) may have
-        // narrowed "id" down to whatever integer width fit, so normalize
-        // back to u64 before reading it out.
-        let id_col = df
-            .column("id")
-            .context("Existing parquet file is missing its id column")?
-            .as_materialized_series()
-            .cast(&DataType::UInt64)
-            .context("id column could not be read as an integer")?;
-        let id_col = id_col.u64().unwrap();
-        let keep_mask: BooleanChunked = id_col
-            .into_iter()
-            .map(|id| id.is_none_or(|id| !is_dirty(modified, id, false)))
-            .collect();
-
-        // Nothing in this particular file belongs to a dirty id - leave it
-        // on disk untouched rather than paying for a pointless rewrite.
-        if keep_mask.all() {
-            continue;
-        }
-
-        df = df
-            .filter(&keep_mask)
-            .context("Failed to filter stale rows out of parquet file")?;
-
-        if df.height() == 0 {
-            fs::remove_file(&path).context("Failed to delete emptied parquet file")?;
-            stats.deleted += 1;
-        } else {
-            ParquetWriter::new(
-                File::create(&path).context("Failed to recreate pruned parquet file")?,
-            )
+    if df.height() == 0 {
+        fs::remove_file(path).context("Failed to delete emptied parquet file")?;
+        stats.deleted += 1;
+    } else {
+        ParquetWriter::new(File::create(path).context("Failed to recreate pruned parquet file")?)
             .with_compression(ParquetCompression::Zstd(Some(ZstdLevel::try_new(18).unwrap())))
             .with_statistics(StatisticsOptions::default())
             .with_row_group_size(Some(1_000_000))
             .finish(&mut df)
             .context("Failed to rewrite pruned parquet file")?;
-            stats.rewritten += 1;
-        }
+        stats.rewritten += 1;
     }
 
-    Ok(stats)
+    Ok(())
+}
+
+fn prune_worker(queue: &Mutex<std::vec::IntoIter<PathBuf>>, modified: &[bool]) -> Result<PruneStats> {
+    let mut stats = PruneStats::default();
+    loop {
+        let path = {
+            let mut guard = queue.lock().unwrap();
+            guard.next()
+        };
+        let Some(path) = path else {
+            return Ok(stats);
+        };
+        prune_one_file(&path, modified, &mut stats)
+            .with_context(|| format!("Failed to prune {}", path.display()))?;
+    }
+}
+
+/// Before an incremental collection is reprocessed, drop any rows in its
+/// existing parquet files that belong to ids the `modified` table marked
+/// dirty - those ids are about to be recollected from their (changed) tar
+/// files, so the old rows would otherwise become duplicates alongside the
+/// new ones. A file that ends up empty is deleted outright. Files are spread
+/// across one worker thread per CPU, since this work is dominated by parquet
+/// decompression/recompression rather than I/O wait.
+fn prune_stale_rows(collection_path: &Path, modified: &[bool]) -> Result<PruneStats> {
+    if !modified.iter().any(|&dirty| dirty) {
+        return Ok(PruneStats::default());
+    }
+
+    let paths: Vec<PathBuf> = fs::read_dir(collection_path)
+        .context("Failed to read collection directory")?
+        .map(|entry| Ok(entry.context("Failed to read directory entry")?.path()))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|path| path.extension().and_then(|e| e.to_str()) == Some("parquet"))
+        .collect();
+
+    if paths.is_empty() {
+        return Ok(PruneStats::default());
+    }
+
+    let thread_count = parquet_worker_count().min(paths.len());
+    let queue = Mutex::new(paths.into_iter());
+
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..thread_count)
+            .map(|_| scope.spawn(|| prune_worker(&queue, modified)))
+            .collect();
+
+        let mut stats = PruneStats::default();
+        for handle in handles {
+            stats.add(&handle.join().unwrap()?);
+        }
+        Ok(stats)
+    })
 }
 
 /// Existing `<prefix>_<N>.parquet` files already occupy indexes `0..=max`, so
