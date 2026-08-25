@@ -35,6 +35,32 @@ fn tz_offset(abbr: &str) -> anyhow::Result<&'static str> {
     }
 }
 
+/// Which specjbb artifact, if any, an archive member is.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum SpecjbbMember {
+    /// The result file: max-jOPS, critical-jOPS and the SLA-<usec>-jOPS points.
+    Raw,
+    /// The controller log, one line per `RT_CURVE`/`WARMUP`/`VALIDATION` tick.
+    ControllerLog,
+    Other,
+}
+
+/// Classify a tar member by suffix rather than by exact path.
+///
+/// The harness used to drop the report files at the archive root and now nests
+/// them under `specjbb/`, with the controller log a further level down in
+/// `specjbb/logs/`. Matching on the suffix keeps both layouts readable, so
+/// result sets collected before the move stay usable.
+fn classify_member(name: &str) -> SpecjbbMember {
+    if name.ends_with(".raw") {
+        SpecjbbMember::Raw
+    } else if name.ends_with("-Controller.log") {
+        SpecjbbMember::ControllerLog
+    } else {
+        SpecjbbMember::Other
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct BenchSuiteCollectSpecjbb {
     summary_df: Option<DataFrame>,
@@ -54,9 +80,9 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
         _: &bench_suite_types::BenchSuiteRun,
         file: &mut dyn bench_suite_collect_results::FileInfoInterface,
     ) -> anyhow::Result<()> {
-        let name = file.name();
+        let member = classify_member(file.name());
 
-        if name.ends_with(".raw") {
+        if member == SpecjbbMember::Raw {
             if self.summary_df.is_some() {
                 return Err(anyhow::anyhow!("Duplicate specjbb .raw files"));
             }
@@ -85,7 +111,7 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
             .context("Failed to create specjbb summary DataFrame")?;
 
             self.summary_df = Some(df);
-        } else if name.ends_with("-Controller.log") {
+        } else if member == SpecjbbMember::ControllerLog {
             if self.profile_df.is_some() {
                 return Err(anyhow::anyhow!("Duplicate specjbb Controller.log files"));
             }
@@ -193,6 +219,92 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every member name a run's tarball can contain, in the layout the harness
+    /// used before the report was moved into its own directory.
+    const ROOT_LAYOUT: &[&str] = &[
+        "specjbb2015-C-20260817-00001.raw",
+        "specjbb2015-C-20260817-00001-Controller.log",
+        "specjbb_summary.txt",
+        "data/",
+        "data/rt-curve/",
+        "data/specjbb2015-C-20260817-00001-runProperties.txt",
+        "reporter.log",
+        "gc.javalog",
+        "current_config.json",
+    ];
+
+    /// The same run in the current layout: report members under `specjbb/`,
+    /// with the controller log one level further down.
+    const NESTED_LAYOUT: &[&str] = &[
+        "specjbb/specjbb2015-C-20260817-00001.raw",
+        "specjbb/logs/specjbb2015-C-20260817-00001-Controller.log",
+        "specjbb/specjbb_summary.txt",
+        "specjbb/data/",
+        "specjbb/data/rt-curve/",
+        "specjbb/data/rt-curve/specjbb2015-C-20260817-00001-overall-throughput-rt.txt",
+        "specjbb/data/specjbb2015-C-20260817-00001-runProperties.txt",
+        "reporter.log",
+        "gc.javalog",
+        "current_config.json",
+    ];
+
+    fn classify_all(names: &[&str]) -> Vec<SpecjbbMember> {
+        names.iter().map(|n| classify_member(n)).collect()
+    }
+
+    #[test]
+    fn both_layouts_yield_exactly_one_raw_and_one_controller_log() {
+        for (label, layout) in [("root", ROOT_LAYOUT), ("nested", NESTED_LAYOUT)] {
+            let found = classify_all(layout);
+            assert_eq!(
+                found.iter().filter(|m| **m == SpecjbbMember::Raw).count(),
+                1,
+                "{label} layout should have exactly one .raw"
+            );
+            assert_eq!(
+                found
+                    .iter()
+                    .filter(|m| **m == SpecjbbMember::ControllerLog)
+                    .count(),
+                1,
+                "{label} layout should have exactly one Controller.log"
+            );
+        }
+    }
+
+    #[test]
+    fn both_layouts_classify_identically() {
+        // Same run, same verdicts - the move must not change what is collected.
+        assert_eq!(
+            classify_all(&ROOT_LAYOUT[..2]),
+            classify_all(&NESTED_LAYOUT[..2]),
+        );
+        assert_eq!(
+            classify_member("specjbb2015-C-20260817-00001.raw"),
+            classify_member("specjbb/specjbb2015-C-20260817-00001.raw"),
+        );
+        assert_eq!(
+            classify_member("specjbb2015-C-20260817-00001-Controller.log"),
+            classify_member("specjbb/logs/specjbb2015-C-20260817-00001-Controller.log"),
+        );
+    }
+
+    #[test]
+    fn nothing_else_in_either_layout_is_claimed() {
+        // The rt-curve dumps in particular must not be mistaken for a .raw or a
+        // controller log; nor should the directory entries tar carries.
+        for name in ROOT_LAYOUT.iter().chain(NESTED_LAYOUT.iter()) {
+            if name.ends_with(".raw") || name.ends_with("-Controller.log") {
+                continue;
+            }
+            assert_eq!(
+                classify_member(name),
+                SpecjbbMember::Other,
+                "{name} should not be claimed"
+            );
+        }
+    }
 
     #[test]
     fn metric_regex_matches_sample() {
