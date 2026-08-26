@@ -35,6 +35,82 @@ fn tz_offset(abbr: &str) -> anyhow::Result<&'static str> {
     }
 }
 
+/// `NaN` marks a step where nothing completed; keep it as a null so it neither
+/// plots as a point nor drags an aggregate.
+fn parse_rt(field: &str) -> anyhow::Result<Option<f64>> {
+    if field.eq_ignore_ascii_case("nan") {
+        return Ok(None);
+    }
+    Ok(Some(field.parse().with_context(|| {
+        format!("Failed to parse specjbb response time: {field}")
+    })?))
+}
+
+/// Parse the reporter's overall throughput/response-time dump.
+///
+/// The file opens with a title line, a `===` rule, and `Domain Marker` rows
+/// repeating max-jOPS and critical-jOPS - all of which the `.raw` file already
+/// provides - then a `jOPS;min;median;...` header followed by one row per
+/// injection-rate step. Only the rows after that header are read, so the
+/// preamble can grow markers without breaking this.
+fn parse_rt_curve(content: &str) -> anyhow::Result<DataFrame> {
+    let mut jops: Vec<f64> = Vec::new();
+    let mut percentiles: [Vec<Option<f64>>; 6] = Default::default();
+    let mut seen_header = false;
+
+    for line in content.lines() {
+        let line = line.trim();
+
+        if !seen_header {
+            // The header is the only line naming both the rate column and the
+            // percentiles; markers and the rule are skipped by falling through.
+            if (line.starts_with("jOPS;") || line.starts_with("IR;")) && line.contains("median") {
+                seen_header = true;
+            }
+            continue;
+        }
+
+        if line.is_empty() {
+            continue;
+        }
+
+        let fields: Vec<&str> = line.split(';').collect();
+        if fields.len() != percentiles.len() + 1 {
+            return Err(anyhow::anyhow!(
+                "Unexpected specjbb rt-curve row with {} fields: {line}",
+                fields.len()
+            ));
+        }
+
+        jops.push(
+            fields[0]
+                .parse()
+                .with_context(|| format!("Failed to parse specjbb rt-curve jOPS: {line}"))?,
+        );
+        for (column, field) in percentiles.iter_mut().zip(&fields[1..]) {
+            column.push(parse_rt(field)?);
+        }
+    }
+
+    if !seen_header {
+        return Err(anyhow::anyhow!(
+            "specjbb rt-curve dump has no jOPS header row"
+        ));
+    }
+
+    let [min, median, p90, p95, p99, max] = percentiles;
+    df![
+        "jops" => jops,
+        "rt_min_us" => min,
+        "rt_median_us" => median,
+        "rt_p90_us" => p90,
+        "rt_p95_us" => p95,
+        "rt_p99_us" => p99,
+        "rt_max_us" => max,
+    ]
+    .context("Failed to create specjbb rt-curve DataFrame")
+}
+
 /// Which specjbb artifact, if any, an archive member is.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum SpecjbbMember {
@@ -42,6 +118,8 @@ enum SpecjbbMember {
     Raw,
     /// The controller log, one line per `RT_CURVE`/`WARMUP`/`VALIDATION` tick.
     ControllerLog,
+    /// The reporter's response-time curve dump: one row per injection-rate step.
+    RtCurve,
     Other,
 }
 
@@ -56,6 +134,8 @@ fn classify_member(name: &str) -> SpecjbbMember {
         SpecjbbMember::Raw
     } else if name.ends_with("-Controller.log") {
         SpecjbbMember::ControllerLog
+    } else if name.ends_with("-overall-throughput-rt.txt") {
+        SpecjbbMember::RtCurve
     } else {
         SpecjbbMember::Other
     }
@@ -63,8 +143,9 @@ fn classify_member(name: &str) -> SpecjbbMember {
 
 #[derive(Debug, Default)]
 pub struct BenchSuiteCollectSpecjbb {
-    summary_df: Option<DataFrame>,
-    profile_df: Option<DataFrame>,
+    summary: Option<DataFrame>,
+    profile: Option<DataFrame>,
+    rt_curve: Option<DataFrame>,
 }
 
 impl BenchSuiteCollectSpecjbb {
@@ -83,7 +164,7 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
         let member = classify_member(file.name());
 
         if member == SpecjbbMember::Raw {
-            if self.summary_df.is_some() {
+            if self.summary.is_some() {
                 return Err(anyhow::anyhow!("Duplicate specjbb .raw files"));
             }
 
@@ -110,9 +191,9 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
             ]
             .context("Failed to create specjbb summary DataFrame")?;
 
-            self.summary_df = Some(df);
+            self.summary = Some(df);
         } else if member == SpecjbbMember::ControllerLog {
-            if self.profile_df.is_some() {
+            if self.profile.is_some() {
                 return Err(anyhow::anyhow!("Duplicate specjbb Controller.log files"));
             }
 
@@ -182,7 +263,13 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
             ]
             .context("Failed to create specjbb profile DataFrame")?;
 
-            self.profile_df = Some(df);
+            self.profile = Some(df);
+        } else if member == SpecjbbMember::RtCurve {
+            if self.rt_curve.is_some() {
+                return Err(anyhow::anyhow!("Duplicate specjbb rt-curve dumps"));
+            }
+
+            self.rt_curve = Some(parse_rt_curve(file.content_string()?)?);
         }
 
         Ok(())
@@ -193,10 +280,10 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
         _: &bench_suite_types::BenchSuiteRun,
     ) -> anyhow::Result<Vec<(Intern, LazyFrame)>> {
         let mut rv = Vec::new();
-        if let Some(df) = self.summary_df {
+        if let Some(df) = self.summary {
             rv.push((Intern::from_static("specjbb_summary"), df.lazy()));
         }
-        if let Some(df) = self.profile_df {
+        if let Some(df) = self.profile {
             // clock_time now carries a real numeric UTC offset (%z), so Polars normalizes it
             // to true UTC directly, same pattern as bench-suite-collector-zgc-phases.
             let lf = df.lazy().with_column(col("clock_time").str().to_datetime(
@@ -211,6 +298,9 @@ impl BenchSuiteCollect for BenchSuiteCollectSpecjbb {
                 lit("raise"),
             ));
             rv.push((Intern::from_static("specjbb_profile"), lf));
+        }
+        if let Some(df) = self.rt_curve {
+            rv.push((Intern::from_static("specjbb_rt_curve"), df.lazy()));
         }
         Ok(rv)
     }
@@ -228,6 +318,8 @@ mod tests {
         "specjbb_summary.txt",
         "data/",
         "data/rt-curve/",
+        "data/rt-curve/specjbb2015-C-20260817-00001-overall-throughput-rt.txt",
+        "data/rt-curve/specjbb2015-C-20260817-00001-probesIRToIR.txt",
         "data/specjbb2015-C-20260817-00001-runProperties.txt",
         "reporter.log",
         "gc.javalog",
@@ -243,6 +335,7 @@ mod tests {
         "specjbb/data/",
         "specjbb/data/rt-curve/",
         "specjbb/data/rt-curve/specjbb2015-C-20260817-00001-overall-throughput-rt.txt",
+        "specjbb/data/rt-curve/specjbb2015-C-20260817-00001-probesIRToIR.txt",
         "specjbb/data/specjbb2015-C-20260817-00001-runProperties.txt",
         "reporter.log",
         "gc.javalog",
@@ -292,10 +385,13 @@ mod tests {
 
     #[test]
     fn nothing_else_in_either_layout_is_claimed() {
-        // The rt-curve dumps in particular must not be mistaken for a .raw or a
-        // controller log; nor should the directory entries tar carries.
+        // Only the three known artifacts are claimed; the sibling probe dump and
+        // the directory entries tar carries must fall through.
         for name in ROOT_LAYOUT.iter().chain(NESTED_LAYOUT.iter()) {
-            if name.ends_with(".raw") || name.ends_with("-Controller.log") {
+            if name.ends_with(".raw")
+                || name.ends_with("-Controller.log")
+                || name.ends_with("-overall-throughput-rt.txt")
+            {
                 continue;
             }
             assert_eq!(
@@ -304,6 +400,85 @@ mod tests {
                 "{name} should not be claimed"
             );
         }
+    }
+
+    #[test]
+    fn rt_curve_is_claimed_in_both_layouts_and_the_probe_dump_is_not() {
+        for layout in [ROOT_LAYOUT, NESTED_LAYOUT] {
+            assert_eq!(
+                classify_all(layout)
+                    .iter()
+                    .filter(|m| **m == SpecjbbMember::RtCurve)
+                    .count(),
+                1,
+                "each layout has exactly one rt-curve dump"
+            );
+        }
+        // Its sibling shares the directory and the run prefix but holds probe
+        // coverage, not response times.
+        assert_eq!(
+            classify_member("specjbb/data/rt-curve/specjbb2015-C-20260825-00001-probesIRToIR.txt"),
+            SpecjbbMember::Other,
+        );
+    }
+
+    /// Trimmed from a real dump: the title line, the rule, both domain markers,
+    /// the header, the all-`NaN` zero-rate row, and two ordinary steps - the
+    /// last using the scientific notation the reporter emits for large maxima.
+    const RT_CURVE_SAMPLE: &str = "\n\
+===================================\n\
+Domain Marker;critical-jOPS;20061.0\n\
+Domain Marker;max-jOPS;27600.0\n\
+jOPS;min;median;90-th percentile;95-th percentile;99-th percentile;max\n\
+0.0;NaN;NaN;NaN;NaN;NaN;NaN\n\
+400.0;300.0;400.0;500.0;500.0;600.0;4400.0\n\
+29200.0;38000.0;670000.0;1100000.0;1300000.0;3100000.0;3.8E7\n";
+
+    #[test]
+    fn rt_curve_keeps_one_row_per_step_and_drops_the_preamble() {
+        let df = parse_rt_curve(RT_CURVE_SAMPLE).unwrap();
+
+        // Three data rows - the markers and the header must not become rows.
+        assert_eq!(df.height(), 3);
+        assert_eq!(
+            df.get_column_names(),
+            ["jops", "rt_min_us", "rt_median_us", "rt_p90_us", "rt_p95_us", "rt_p99_us", "rt_max_us"],
+        );
+
+        let jops = df.column("jops").unwrap().f64().unwrap();
+        assert_eq!(jops.get(1), Some(400.0));
+        assert_eq!(jops.get(2), Some(29200.0));
+
+        let p99 = df.column("rt_p99_us").unwrap().f64().unwrap();
+        assert_eq!(p99.get(1), Some(600.0));
+        // Scientific notation survives the round trip.
+        assert_eq!(
+            df.column("rt_max_us").unwrap().f64().unwrap().get(2),
+            Some(3.8e7),
+        );
+    }
+
+    #[test]
+    fn rt_curve_nan_becomes_null_not_a_nan_value() {
+        let df = parse_rt_curve(RT_CURVE_SAMPLE).unwrap();
+        let median = df.column("rt_median_us").unwrap().f64().unwrap();
+
+        // A null is skipped by aggregations; a NaN would poison them.
+        assert_eq!(median.get(0), None);
+        assert_eq!(df.column("rt_median_us").unwrap().null_count(), 1);
+        assert_eq!(median.get(1), Some(400.0));
+    }
+
+    #[test]
+    fn rt_curve_rejects_a_dump_it_cannot_trust() {
+        // No header: every line looks like preamble, so silently returning an
+        // empty table would hide a reporter change.
+        let headerless = "\n===================================\nDomain Marker;max-jOPS;27600.0\n";
+        assert!(parse_rt_curve(headerless).is_err());
+
+        // A row that lost a column would otherwise shift percentiles sideways.
+        let short_row = "jOPS;min;median;90-th percentile;95-th percentile;99-th percentile;max\n400.0;300.0;400.0;500.0;500.0;600.0\n";
+        assert!(parse_rt_curve(short_row).is_err());
     }
 
     #[test]
