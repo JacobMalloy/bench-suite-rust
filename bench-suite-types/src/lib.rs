@@ -102,6 +102,7 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     gc_logging:Intern,
     java_log_gc:Intern,
     java_log_os:Intern,
+    java_log_filecount:u64,
     memory_ratio:PositiveNonZeroF64,
     memory_config:NonZero<u64>,
     softmax:Intern,
@@ -172,6 +173,9 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     threadstat_wrapper_location:Intern,
     threadstat_event:Intern,
     threadstat_frequency:NonZero<u64>,
+
+
+    perf_events:Intern,
 
     //cos
     cos_config:Intern,

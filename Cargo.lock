@@ -196,6 +196,7 @@ dependencies = [
  "bench-suite-collector-java-options",
  "bench-suite-collector-java-threads",
  "bench-suite-collector-mark-abuse",
+ "bench-suite-collector-perf-stat",
  "bench-suite-collector-specjbb",
  "bench-suite-collector-status",
  "bench-suite-collector-system-load",
@@ -354,6 +355,17 @@ dependencies = [
  "bench-suite-types",
  "polars",
  "regex",
+ "string-intern",
+]
+
+[[package]]
+name = "bench-suite-collector-perf-stat"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-collect-results",
+ "bench-suite-types",
+ "polars",
  "string-intern",
 ]
 
