@@ -1,6 +1,6 @@
 use core::num::NonZero;
 use core::slice;
-use custom_float::PositiveNonZeroF64;
+use custom_float::{PositiveF64, PositiveNonZeroF64};
 use polars::prelude::*;
 use string_intern::Intern;
 
@@ -92,5 +92,14 @@ impl<T: ToSeriesColumn> ToSeriesColumn for Option<T> {
     }
     fn get_null(name: PlSmallStr) -> Series {
         T::get_null(name)
+    }
+}
+
+impl ToSeriesColumn for PositiveF64 {
+    fn to_series_column(&self, name: PlSmallStr) -> Series {
+        Float64Chunked::from_slice(name, slice::from_ref(&self.get())).into_series()
+    }
+    fn get_null(name: PlSmallStr) -> Series {
+        Series::full_null(name, 1, &DataType::Float64)
     }
 }
