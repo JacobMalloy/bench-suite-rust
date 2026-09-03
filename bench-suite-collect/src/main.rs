@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, anyhow};
 use crossbeam::channel;
+use polars::io::parquet::metadata::{ParquetStatistics, deserialize as deserialize_statistics};
 use polars::polars_utils::compression::ZstdLevel;
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -126,12 +127,16 @@ fn build_modified_table(config: &BenchSuiteTasks, since_ms: i64) -> Vec<bool> {
 struct PruneStats {
     rewritten: u64,
     deleted: u64,
+    skipped_by_statistics: u64,
+    skipped_by_id_column: u64,
 }
 
 impl PruneStats {
     fn add(&mut self, other: &Self) {
         self.rewritten += other.rewritten;
         self.deleted += other.deleted;
+        self.skipped_by_statistics += other.skipped_by_statistics;
+        self.skipped_by_id_column += other.skipped_by_id_column;
     }
 }
 
@@ -142,17 +147,84 @@ fn parquet_worker_count() -> usize {
     std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
 }
 
-/// Drops any rows belonging to a dirty id out of a single existing parquet
-/// file, leaving the file untouched if none of its rows are dirty, rewriting
-/// it in place if some (but not all) rows were dropped, or deleting it
-/// outright if every row was dropped.
-fn prune_one_file(path: &Path, modified: &[bool], stats: &mut PruneStats) -> Result<()> {
-    let mut df = ParquetReader::new(BufReader::new(
-        File::open(path).context("Failed to open parquet file for pruning")?,
-    ))
-    .finish()
-    .context("Failed to read parquet file for pruning")?;
+/// Whether any id in the inclusive range `lo..=hi` is marked dirty. Ids past
+/// the end of the `modified` table are ones this run isn't collecting at all,
+/// so they're never dirty and a range entirely past the end has no hits.
+fn any_dirty_in_range(modified: &[bool], lo: u64, hi: u64) -> bool {
+    let lo = usize::try_from(lo).unwrap_or(usize::MAX);
+    let hi = usize::try_from(hi)
+        .unwrap_or(usize::MAX)
+        .min(modified.len().saturating_sub(1));
+    lo <= hi
+        && modified
+            .get(lo..=hi)
+            .is_some_and(|range| range.contains(&true))
+}
 
+/// Pulls a row group's min or max statistic - handed back as a single-element
+/// array - out as a `u64`, whatever integer width `shrink_int_columns` picked
+/// for the column on the way in.
+fn statistic_as_u64(array: ArrayRef) -> Option<u64> {
+    Series::from_arrow(PlSmallStr::from_static("id"), array)
+        .ok()?
+        .cast(&DataType::UInt64)
+        .ok()?
+        .u64()
+        .ok()?
+        .get(0)
+}
+
+/// Uses the row-group statistics in a parquet file's footer to decide whether
+/// the file could contain a row for a dirty id at all. Every row group records
+/// the min and max `id` it holds, so a file whose id ranges all miss the dirty
+/// set is ruled out from the footer alone - without reading, let alone
+/// decompressing, a single column. Anything that can't be answered from the
+/// statistics (no `id` in the column lookup, or missing/unreadable min-max)
+/// conservatively answers `true`, leaving the real decision to the caller.
+fn may_contain_dirty_id(path: &Path, modified: &[bool]) -> Result<bool> {
+    let mut reader = ParquetReader::new(BufReader::new(
+        File::open(path).context("Failed to open parquet file for pruning")?,
+    ));
+    let schema = reader
+        .schema()
+        .context("Failed to read parquet schema for pruning")?;
+    let Some(id_field) = schema.get("id") else {
+        return Ok(true);
+    };
+    let metadata = reader
+        .get_metadata()
+        .context("Failed to read parquet metadata for pruning")?
+        .clone();
+
+    for row_group in &metadata.row_groups {
+        let Some(mut columns) = row_group.columns_under_root_iter("id") else {
+            return Ok(true);
+        };
+        let statistics = deserialize_statistics(id_field, &mut columns)
+            .map_err(|e| anyhow!("Failed to read id statistics: {e}"))?;
+        let Some(ParquetStatistics::Column(column)) = statistics else {
+            return Ok(true);
+        };
+        let column = column
+            .into_arrow()
+            .map_err(|e| anyhow!("Failed to decode id statistics: {e}"))?;
+        let (Some(min), Some(max)) = (column.min_value, column.max_value) else {
+            return Ok(true);
+        };
+        let (Some(min), Some(max)) = (statistic_as_u64(min), statistic_as_u64(max)) else {
+            return Ok(true);
+        };
+        if any_dirty_in_range(modified, min, max) {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Turns the `id` column of `df` into a keep mask: `false` for rows whose id
+/// the `modified` table marked dirty, `true` for everything else.
+fn keep_mask(df: &DataFrame, modified: &[bool]) -> Result<BooleanChunked> {
     // `shrink_int_columns` (run before every parquet write) may have
     // narrowed "id" down to whatever integer width fit, so normalize
     // back to u64 before reading it out.
@@ -162,20 +234,59 @@ fn prune_one_file(path: &Path, modified: &[bool], stats: &mut PruneStats) -> Res
         .as_materialized_series()
         .cast(&DataType::UInt64)
         .context("id column could not be read as an integer")?;
-    let id_col = id_col.u64().unwrap();
-    let keep_mask: BooleanChunked = id_col
+    Ok(id_col
+        .u64()
+        .unwrap()
         .into_iter()
         .map(|id| id.is_none_or(|id| !is_dirty(modified, id, false)))
-        .collect();
+        .collect())
+}
 
-    // Nothing in this particular file belongs to a dirty id - leave it on
-    // disk untouched rather than paying for a pointless rewrite.
-    if keep_mask.all() {
+/// Drops any rows belonging to a dirty id out of a single existing parquet
+/// file, leaving the file untouched if none of its rows are dirty, rewriting
+/// it in place if some (but not all) rows were dropped, or deleting it
+/// outright if every row was dropped.
+///
+/// Reading the whole table is the expensive part, so it's the last thing
+/// tried: parquet's footer statistics rule most files out for free, and the
+/// columnar layout lets the survivors be checked by decompressing just the
+/// one narrow `id` column.
+fn prune_one_file(path: &Path, modified: &[bool], stats: &mut PruneStats) -> Result<()> {
+    if !may_contain_dirty_id(path, modified)? {
+        stats.skipped_by_statistics += 1;
         return Ok(());
     }
 
+    // Statistics only bound the id range, so a hit there doesn't mean any of
+    // the ids actually present are dirty. Read back just the `id` column -
+    // parquet stores each column separately, so this decompresses one narrow
+    // integer column instead of the entire table - and check for real.
+    let ids = ParquetReader::new(BufReader::new(
+        File::open(path).context("Failed to open parquet file for pruning")?,
+    ))
+    .with_columns(Some(vec!["id".to_string()]))
+    .finish()
+    .context("Failed to read id column for pruning")?;
+    let keep = keep_mask(&ids, modified)?;
+
+    // Nothing in this particular file belongs to a dirty id - leave it on
+    // disk untouched rather than paying for a pointless read and rewrite.
+    if keep.all() {
+        stats.skipped_by_id_column += 1;
+        return Ok(());
+    }
+
+    // Rows really are being dropped, so now pay for the full read. The
+    // projected read above yielded the file's rows in their stored order, so
+    // its mask lines up with this one row for row.
+    let mut df = ParquetReader::new(BufReader::new(
+        File::open(path).context("Failed to open parquet file for pruning")?,
+    ))
+    .finish()
+    .context("Failed to read parquet file for pruning")?;
+
     df = df
-        .filter(&keep_mask)
+        .filter(&keep)
         .context("Failed to filter stale rows out of parquet file")?;
 
     if df.height() == 0 {
@@ -183,7 +294,9 @@ fn prune_one_file(path: &Path, modified: &[bool], stats: &mut PruneStats) -> Res
         stats.deleted += 1;
     } else {
         ParquetWriter::new(File::create(path).context("Failed to recreate pruned parquet file")?)
-            .with_compression(ParquetCompression::Zstd(Some(ZstdLevel::try_new(18).unwrap())))
+            .with_compression(ParquetCompression::Zstd(Some(
+                ZstdLevel::try_new(18).unwrap(),
+            )))
             .with_statistics(StatisticsOptions::default())
             .with_row_group_size(Some(1_000_000))
             .finish(&mut df)
@@ -194,7 +307,10 @@ fn prune_one_file(path: &Path, modified: &[bool], stats: &mut PruneStats) -> Res
     Ok(())
 }
 
-fn prune_worker(queue: &Mutex<std::vec::IntoIter<PathBuf>>, modified: &[bool]) -> Result<PruneStats> {
+fn prune_worker(
+    queue: &Mutex<std::vec::IntoIter<PathBuf>>,
+    modified: &[bool],
+) -> Result<PruneStats> {
     let mut stats = PruneStats::default();
     loop {
         let path = {
@@ -577,15 +693,13 @@ fn main() {
 
     // Prune stale rows for dirty ids out of each incremental collection's
     // existing parquet files before any new data is written for them.
-    let mut pruned_rewritten: u64 = 0;
-    let mut pruned_deleted: u64 = 0;
+    let mut prune_stats = PruneStats::default();
     for (name, mode) in &collection_mode {
         if let CollectionMode::Incremental { modified } = mode {
             let stats = prune_stale_rows(&base_path.join(name), modified)
                 .with_context(|| format!("Failed to prune stale rows from collection {name}"))
                 .unwrap();
-            pruned_rewritten += stats.rewritten;
-            pruned_deleted += stats.deleted;
+            prune_stats.add(&stats);
         }
     }
 
@@ -610,8 +724,7 @@ fn main() {
 
     let progress = indicatif::MultiProgress::new();
     let main_progress = progress.add(
-        indicatif::ProgressBar::new_spinner()
-            .with_finish(indicatif::ProgressFinish::AndLeave),
+        indicatif::ProgressBar::new_spinner().with_finish(indicatif::ProgressFinish::AndLeave),
     );
     main_progress.set_style(
         indicatif::ProgressStyle::default_spinner()
@@ -657,8 +770,182 @@ fn main() {
     }
 
     let written_files = written_files.load(Ordering::Relaxed);
+    let PruneStats {
+        rewritten,
+        deleted,
+        skipped_by_statistics,
+        skipped_by_id_column,
+    } = prune_stats;
     println!(
-        "Done: {written_files} parquet file(s) written, {pruned_rewritten} rewritten and {pruned_deleted} deleted while pruning stale rows ({} file(s) touched in total).",
-        written_files + pruned_rewritten + pruned_deleted
+        "Done: {written_files} parquet file(s) written, {rewritten} rewritten and {deleted} deleted while pruning stale rows ({} file(s) touched in total).",
+        written_files + rewritten + deleted
     );
+    println!(
+        "Pruning left {skipped_by_statistics} file(s) unread on row-group statistics alone, and {skipped_by_id_column} more after reading just their id column."
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    /// Writes a parquet file holding just an `id` column, through the same
+    /// shrink-then-write path the collector uses, so the row-group statistics
+    /// land in the footer exactly as they do in a real collection.
+    fn write_ids(path: &Path, ids: &[u64]) {
+        let mut df = polars_helpers::shrink_int_columns(
+            &df!("id" => ids.to_vec()).expect("failed to build test frame"),
+        )
+        .expect("failed to shrink test frame");
+        ParquetWriter::new(File::create(path).expect("failed to create test parquet file"))
+            .with_compression(ParquetCompression::Zstd(Some(
+                ZstdLevel::try_new(18).unwrap(),
+            )))
+            .with_statistics(StatisticsOptions::default())
+            .with_row_group_size(Some(1_000_000))
+            .finish(&mut df)
+            .expect("failed to write test parquet file");
+    }
+
+    fn read_ids(path: &Path) -> Vec<u64> {
+        let df = ParquetReader::new(BufReader::new(
+            File::open(path).expect("failed to open test parquet file"),
+        ))
+        .finish()
+        .expect("failed to read test parquet file");
+        let ids = df.column("id").unwrap().cast(&DataType::UInt64).unwrap();
+        ids.u64().unwrap().into_no_null_iter().collect()
+    }
+
+    /// A fresh, empty directory of our own, cleaned up when the guard drops.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            static COUNTER: AtomicUsize = AtomicUsize::new(0);
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = env::temp_dir().join(format!("prune-test-{}-{n}", std::process::id()));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir_all(&path).expect("failed to create test directory");
+            Self(path)
+        }
+
+        fn file(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// `modified` table of length `len` with just the listed ids dirty.
+    fn dirty(len: usize, ids: &[usize]) -> Vec<bool> {
+        let mut modified = vec![false; len];
+        for &id in ids {
+            modified[id] = true;
+        }
+        modified
+    }
+
+    #[test]
+    fn any_dirty_in_range_handles_edges() {
+        let modified = dirty(10, &[4]);
+        assert!(any_dirty_in_range(&modified, 4, 4));
+        assert!(any_dirty_in_range(&modified, 0, 9));
+        assert!(!any_dirty_in_range(&modified, 5, 9));
+        assert!(!any_dirty_in_range(&modified, 0, 3));
+        // Ids past the end of the table aren't being collected, so a range
+        // that runs off the end - or starts past it - has no dirty ids there.
+        assert!(!any_dirty_in_range(&modified, 10, 100));
+        assert!(any_dirty_in_range(&modified, 4, 100));
+        assert!(!any_dirty_in_range(&modified, 0, 0));
+        assert!(!any_dirty_in_range(&[], 0, 100));
+    }
+
+    #[test]
+    fn statistics_rule_out_a_file_whose_ids_are_all_clean() {
+        let dir = TempDir::new();
+        let path = dir.file("a.parquet");
+        write_ids(&path, &[10, 11, 12, 13]);
+
+        // Dirty ids sit entirely below and above this file's [10, 13] range.
+        assert!(!may_contain_dirty_id(&path, &dirty(30, &[3, 20])).unwrap());
+        // ... and now one lands inside it.
+        assert!(may_contain_dirty_id(&path, &dirty(30, &[12])).unwrap());
+        // A dirty id inside the min/max range but absent from the file can't
+        // be ruled out by statistics alone - that's the id column's job.
+        assert!(may_contain_dirty_id(&path, &dirty(30, &[11])).unwrap());
+    }
+
+    #[test]
+    fn a_clean_file_is_skipped_without_being_rewritten() {
+        let dir = TempDir::new();
+        let path = dir.file("a.parquet");
+        write_ids(&path, &[10, 12, 14]);
+        let before = fs::metadata(&path).unwrap().len();
+
+        let mut stats = PruneStats::default();
+        prune_one_file(&path, &dirty(30, &[20]), &mut stats).unwrap();
+        assert_eq!(stats.skipped_by_statistics, 1);
+
+        // Id 13 is inside [10, 14] but not actually in the file, so the
+        // statistics can't rule it out and the id column has to be read.
+        prune_one_file(&path, &dirty(30, &[13]), &mut stats).unwrap();
+        assert_eq!(stats.skipped_by_id_column, 1);
+
+        assert_eq!(stats.rewritten, 0);
+        assert_eq!(stats.deleted, 0);
+        assert_eq!(fs::metadata(&path).unwrap().len(), before);
+        assert_eq!(read_ids(&path), vec![10, 12, 14]);
+    }
+
+    #[test]
+    fn dirty_rows_are_dropped_and_the_file_rewritten() {
+        let dir = TempDir::new();
+        let path = dir.file("a.parquet");
+        write_ids(&path, &[10, 12, 14, 16]);
+
+        let mut stats = PruneStats::default();
+        prune_one_file(&path, &dirty(30, &[12, 16]), &mut stats).unwrap();
+
+        assert_eq!(stats.rewritten, 1);
+        assert_eq!(stats.deleted, 0);
+        assert_eq!(read_ids(&path), vec![10, 14]);
+    }
+
+    #[test]
+    fn a_fully_dirty_file_is_deleted() {
+        let dir = TempDir::new();
+        let path = dir.file("a.parquet");
+        write_ids(&path, &[10, 12]);
+
+        let mut stats = PruneStats::default();
+        prune_one_file(&path, &dirty(30, &[10, 12]), &mut stats).unwrap();
+
+        assert_eq!(stats.deleted, 1);
+        assert_eq!(stats.rewritten, 0);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn pruning_a_directory_reports_every_outcome() {
+        let dir = TempDir::new();
+        write_ids(&dir.file("clean.parquet"), &[1, 2]);
+        write_ids(&dir.file("partial.parquet"), &[10, 11]);
+        write_ids(&dir.file("gone.parquet"), &[20, 21]);
+        fs::write(dir.file("ignored.txt"), "not a parquet file").unwrap();
+
+        let stats = prune_stale_rows(&dir.0, &dirty(30, &[11, 20, 21])).unwrap();
+
+        assert_eq!(stats.rewritten, 1);
+        assert_eq!(stats.deleted, 1);
+        assert_eq!(stats.skipped_by_statistics, 1);
+        assert_eq!(read_ids(&dir.file("clean.parquet")), vec![1, 2]);
+        assert_eq!(read_ids(&dir.file("partial.parquet")), vec![10]);
+        assert!(!dir.file("gone.parquet").exists());
+    }
 }
