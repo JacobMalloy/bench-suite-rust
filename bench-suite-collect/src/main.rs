@@ -421,6 +421,20 @@ where
         }
         tmp
     }
+
+    /// Retires the progress bar, leaving it drawn at its final state, and
+    /// puts the cursor on a fresh line ready for ordinary output.
+    ///
+    /// Both halves matter to anything printed afterwards. A live bar rewrites
+    /// its own line on every tick, so output printed underneath one is first
+    /// appended to the bar's line and then erased by the next redraw. Stopping
+    /// it is not enough on its own, though: a finished bar is left drawn
+    /// *without* a trailing newline, so the next `println!` still lands on the
+    /// end of it. Callers must be done consuming the queue.
+    fn finish(&self) {
+        self.pb.finish();
+        println!();
+    }
 }
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -768,6 +782,11 @@ fn main() {
             .with_context(|| format!("Failed to write marker for collection {name}"))
             .unwrap();
     }
+
+    // The spinner is owned by `queue`, so it would otherwise stay live - and
+    // keep redrawing over the summary below - until it drops at the end of
+    // main. Retiring it here separates the two cleanly.
+    queue.finish();
 
     let written_files = written_files.load(Ordering::Relaxed);
     let PruneStats {
