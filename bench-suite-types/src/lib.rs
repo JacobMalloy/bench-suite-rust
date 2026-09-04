@@ -104,6 +104,7 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     java_log_os:Intern,
     java_log_filecount:u64,
     java_disable_async_logging:bool,
+    dacapo_disable_latency_csv:bool,
     memory_ratio:PositiveNonZeroF64,
     memory_config:NonZero<u64>,
     softmax:Intern,
