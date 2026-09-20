@@ -119,6 +119,7 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     GCThreadCPUs:Intern,
     NonGCThreadCPUs:Intern,
     numactl_cpus:Intern,
+    numactl_mem:Intern,
 
     zgc_deactivate_proactive:bool,
 
