@@ -93,6 +93,7 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 } , optional:{
     timeout:NonZero<u64>,
     cpu_mask:NonZero<u64>,
+    msr:Intern,
     //java
     jdk:Intern,
     process_count:NonZero<u64>,
