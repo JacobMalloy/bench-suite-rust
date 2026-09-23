@@ -28,4 +28,5 @@ bench-suite-collector-system-load = {path = "../collectors/bench-suite-collector
 bench-suite-collector-specjbb = {path = "../collectors/bench-suite-collector-specjbb/"}
 bench-suite-collector-hazelcast-jet = {path = "../collectors/bench-suite-collector-hazelcast-jet/"}
 bench-suite-collector-perf-stat = {path = "../collectors/bench-suite-collector-perf-stat/"}
+bench-suite-collector-msr = {path = "../collectors/bench-suite-collector-msr/"}
 bench-suite-collect-results = {path = "../bench-suite-collect-results/"}

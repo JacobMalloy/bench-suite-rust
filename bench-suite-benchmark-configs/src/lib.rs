@@ -9,6 +9,7 @@ use bench_suite_collector_hazelcast_jet::BenchSuiteCollectHazelcastJet;
 use bench_suite_collector_java_options::BenchSuiteCollectJavaOptions;
 use bench_suite_collector_java_threads::BenchSuiteCollectJavaThreads;
 use bench_suite_collector_mark_abuse::BenchSuiteCollectMarkAbuse;
+use bench_suite_collector_msr::BenchSuiteCollectMsr;
 use bench_suite_collector_perf_stat::BenchSuiteCollectPerfStat;
 use bench_suite_collector_specjbb::BenchSuiteCollectSpecjbb;
 use bench_suite_collector_status::BenchSuiteCollectStatus;
@@ -47,7 +48,7 @@ impl std::fmt::Display for InvalidBenchmark {
 
 impl std::error::Error for InvalidBenchmark {}
 
-const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 18] = [
+const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 19] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectDacapoIteration::boxed,
@@ -66,9 +67,10 @@ const DACAPO_SAMPLES2_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 18] = [
     BenchSuiteCollectZgcStats::boxed,
     BenchSuiteCollectZgcHeapStats::boxed,
     BenchSuiteCollectPerfStat::boxed,
+    BenchSuiteCollectMsr::boxed,
 ];
 
-const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 16] = [
+const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 17] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectJavaOptions::boxed,
@@ -85,9 +87,10 @@ const MARK_ABUSE_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 16] = [
     BenchSuiteCollectZgcStats::boxed,
     BenchSuiteCollectZgcHeapStats::boxed,
     BenchSuiteCollectPerfStat::boxed,
+    BenchSuiteCollectMsr::boxed,
 ];
 
-const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 16] = [
+const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 17] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectJavaOptions::boxed,
@@ -104,9 +107,10 @@ const SPECJBB_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 16] = [
     BenchSuiteCollectZgcHeapStats::boxed,
     BenchSuiteCollectSpecjbb::boxed,
     BenchSuiteCollectPerfStat::boxed,
+    BenchSuiteCollectMsr::boxed,
 ];
 
-const HAZELCAST_JET_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 15] = [
+const HAZELCAST_JET_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 16] = [
     BenchSuiteCollectConfig::boxed,
     BenchSuiteCollectTime::boxed,
     BenchSuiteCollectJavaThreads::boxed,
@@ -122,6 +126,7 @@ const HAZELCAST_JET_CONFIG: [fn() -> Box<dyn BenchSuiteCollect>; 15] = [
     BenchSuiteCollectZgcHeapStats::boxed,
     BenchSuiteCollectHazelcastJet::boxed,
     BenchSuiteCollectPerfStat::boxed,
+    BenchSuiteCollectMsr::boxed,
 ];
 
 type CreateCollectorFunction = fn() -> Box<dyn BenchSuiteCollect>;
