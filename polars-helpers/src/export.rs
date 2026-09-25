@@ -11,17 +11,24 @@ use polars_parquet::write::{
 
 pub use polars_parquet::write::{CompressionOptions, ZstdLevel};
 
-/// The Arrow/Parquet schema and per-column encoding for one table shape,
-/// derived once from a Polars `Schema` and reusable across every Parquet file
-/// written for that shape.
+/// The Arrow schema, Parquet field types and per-column encodings for one
+/// table shape, derived once from a Polars `Schema` and reused across every
+/// Parquet file written for that shape.
 ///
-/// Deriving this (`schema_to_arrow_checked`, `to_parquet_schema`,
-/// `get_dtype_encoding`) is real, repeated work if done on every file written
-/// for what is logically "the same table" - callers that write many shards of
-/// one table (see `bench-suite-collect`'s per-table accumulator) should
-/// resolve it once and pass the same `ResolvedSchema` to each `write_parquet`
-/// call, re-resolving only when a shard's actual `Schema` differs (e.g. after
-/// int-shrinking picks a different width).
+/// This exists to carry the per-column encoding overrides `write_parquet`
+/// applies - resolving once per table shape rather than once per file is a
+/// convenience that falls out of that, not a measured speed win. Two things
+/// keep it from being one: `FileWriter::try_new` re-runs `to_parquet_schema`
+/// internally on every write, so the Parquet `SchemaDescriptor` is rebuilt
+/// per file whatever this caches (`new_with_parquet_schema` would take the
+/// cached one, if it ever seemed worth it), and all of this schema work is
+/// per-column, which is noise beside zstd-18 compressing a multi-hundred-MB
+/// shard.
+///
+/// Callers writing many shards of one table (see `bench-suite-collect`'s
+/// per-table accumulator) resolve it once and pass the same `ResolvedSchema`
+/// to each `write_parquet` call, re-resolving only when a shard's actual
+/// `Schema` differs (e.g. after int-shrinking picks a different width).
 pub struct ResolvedSchema {
     source: Schema,
     arrow_schema: ArrowSchema,
