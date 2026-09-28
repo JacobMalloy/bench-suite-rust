@@ -184,6 +184,30 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 
 
     perf_events:Intern,
+    perf_location:Intern,
+
+    perf_record:bool,
+    perf_record_events:Intern,
+    // "none" for no call-graph, otherwise a `--call-graph` mode ("dwarf",
+    // "fp", "lbr") - kept a single string type (see PerfRecord's docstring)
+    // rather than a bool, since a real value goes there just as often as a
+    // disable does.
+    perf_record_call_graph:Intern,
+    perf_record_cpus:Intern,
+    // "none" for the (not recommended - see PerfRecord) un-set-clockid
+    // kernel default, otherwise the `-k` clockid ("monotonic" in practice).
+    perf_record_clockid:Intern,
+    perf_record_delay_secs:PositiveNonZeroF64,
+    perf_record_duration_secs:PositiveNonZeroF64,
+    perf_record_mmap_pages:NonZero<u64>,
+    perf_record_data:bool,
+    perf_record_phys_data:bool,
+    perf_record_branch:Intern,
+    perf_record_intr_regs:Intern,
+    perf_record_user_regs:Intern,
+    perf_record_freq:NonZero<u64>,
+
+    java_dump_perf_map:bool,
 
     //cos
     cos_config:Intern,
