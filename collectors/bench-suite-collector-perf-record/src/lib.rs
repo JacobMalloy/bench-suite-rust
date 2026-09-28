@@ -93,6 +93,17 @@ struct ParsedSamples {
     time: Vec<f64>,
     event: Vec<String>,
     ip: Vec<u64>,
+    // The `-d` fields, present only when the run's `PerfRecord` had
+    // `data=True`. Null throughout otherwise, rather than absent columns, so
+    // that runs with and without them concat into one table. `data_src` is
+    // kept exactly as perf renders it, which is its raw integer value
+    // followed by the decoded form -- e.g.
+    // `5080022 |OP LOAD|LVL L3 hit|SNP None|TLB L1 or L2 hit|LCK No`. Both
+    // halves are preserved because that string packs several independent
+    // fields (op, level, snoop, TLB, lock) and which of them a consumer wants
+    // is not knowable here; the decoded part starts at the first space.
+    addr: Vec<Option<u64>>,
+    data_src: Vec<Option<String>>,
     // ip -> its (stable, deterministic within one run) resolution. Kept
     // separate from the sample rows above so the same libjvm.so function
     // hit by thousands of samples is stored once, not once per sample.
@@ -130,6 +141,16 @@ fn parse_symbols_txt(content: &str) -> anyhow::Result<ParsedSamples> {
         out.time.push(caps["time"].parse().context("Failed to parse time")?);
         out.event.push(caps["event"].to_string());
         out.ip.push(ip);
+        // Both come from one optional group, so they are either both there or
+        // both absent -- but they are read independently anyway, so a future
+        // perf that emits only one does not silently shift the other.
+        out.addr.push(
+            caps.name("addr")
+                .map(|m| parse_hex_u64(m.as_str(), "data address"))
+                .transpose()?,
+        );
+        out.data_src
+            .push(caps.name("data_src").map(|m| m.as_str().to_string()));
 
         // The srcline continuation, if there is one, has to be consumed here
         // regardless of whether this ip's resolution is cached below already
@@ -179,6 +200,8 @@ fn samples_lazyframe(samples: &ParsedSamples, offset: Option<&ClockOffset>) -> a
         "time" => &samples.time,
         "event" => &samples.event,
         "ip" => &samples.ip,
+        "addr" => &samples.addr,
+        "data_src" => &samples.data_src,
     ]
     .context("Failed to create perf_record_samples DataFrame")?;
 
@@ -325,6 +348,27 @@ mod tests {
         );
         assert_eq!(df.event, vec!["cpu/event=0xd0,umask=0x81,period=2000003/ppp"]);
         assert_eq!(df.ip, vec![0xffff_ffff_8d3b_0a9d]);
+        // The point of -d: the address the access TOUCHED, which is what
+        // separates (say) a ZGC heap object header from a CHeapBitMap livemap
+        // word without depending on symbols -- the hot livemap helpers are
+        // .inline.hpp and inline away.
+        assert_eq!(df.addr, vec![Some(0xffff_9a1d_c151_2000)]);
+        // perf prints data_src as its raw value AND its decoded form; both are
+        // kept, so this is the whole token run between addr and ip.
+        assert_eq!(
+            df.data_src.first().unwrap().as_deref(),
+            Some("5080022 |OP LOAD|LVL N/A|SNP N/A|TLB N/A|LCK N/A|BLK  N/A")
+        );
+    }
+
+    #[test]
+    fn a_run_without_data_sampling_leaves_addr_and_data_src_null() {
+        let df = samples(
+            "         swapper     0/0     [015] 5521401.553801863: cycles:ppp:  \
+             ffffffff8d3b0a9d poll_idle+0x8d (/usr/lib/debug/boot/vmlinux-6.1.27)\n",
+        );
+        assert_eq!(df.addr, vec![None]);
+        assert_eq!(df.data_src, vec![None]);
     }
 
     #[test]
