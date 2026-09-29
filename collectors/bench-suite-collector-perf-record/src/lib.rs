@@ -27,6 +27,13 @@ use string_intern::Intern;
 /// anchors the *dso* group at the end of the line and works inward from
 /// there rather than splitting on whitespace naively.
 ///
+/// `pid`, `tid` and `cpu` are all matched as signed, because perf writes
+/// -1 for any of them it could not resolve (with `comm` rendered as ":-1"),
+/// and a sample it could not attribute is still a sample that happened -
+/// see `parse_task_id`. Matching `cpu` as unsigned would be worse than a
+/// parse error: the line would fall through to the continuation branch
+/// below and be silently absorbed as the *previous* sample's srcline.
+///
 /// `addr`/`data_src` appear only when the run's `PerfRecord` had `data=True`
 /// (`-d`), and only as this exact pair. This does not yet handle
 /// `phys_data`/branch-stack fields (`--phys-data`/`branch`), which land in
@@ -43,7 +50,7 @@ static SAMPLE_LINE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         ^\s*
         (?P<comm>.*?)\s*
         (?P<pid>-?\d+)/(?P<tid>-?\d+)\s+
-        \[(?P<cpu>\d+)\]\s+
+        \[(?P<cpu>-?\d+)\]\s+
         (?P<time>\d+\.\d+):\s+
         (?P<event>.+):\s+
         (?:(?P<addr>[0-9a-f]+)\s+(?P<data_src>.*?)\s+)?
@@ -87,9 +94,16 @@ struct SymbolInfo {
 #[derive(Default)]
 struct ParsedSamples {
     comm: Vec<String>,
-    pid: Vec<u64>,
-    tid: Vec<u64>,
-    cpu: Vec<u32>,
+    // perf writes -1 for a pid/tid/cpu it could not attribute the sample to
+    // -- a kernel sample whose task had already exited, most often, which
+    // also renders `comm` as the placeholder ":-1". That is "unknown", not a
+    // task numbered -1, so it is kept as null rather than parsed into the
+    // unsigned id it is not. These are rare (tens of lines in a file of
+    // hundreds of thousands) but they are spread across whole benchmark
+    // classes, so treating one as a hard parse error loses entire runs.
+    pid: Vec<Option<u64>>,
+    tid: Vec<Option<u64>>,
+    cpu: Vec<Option<u32>>,
     time: Vec<f64>,
     event: Vec<String>,
     ip: Vec<u64>,
@@ -114,6 +128,27 @@ fn parse_hex_u64(text: &str, what: &str) -> anyhow::Result<u64> {
     u64::from_str_radix(text, 16).with_context(|| format!("Failed to parse {what} {text:?} as hex"))
 }
 
+/// Parses a pid/tid/cpu, mapping perf's negative "unknown" placeholder to
+/// `None`. Parsing through `i64` first, rather than testing for the literal
+/// "-1", keeps any other negative perf might use in the same bucket instead
+/// of turning it into a hard error; a value too large for the unsigned
+/// target is still an error, since that is a layout change, not a
+/// placeholder.
+fn parse_task_id<T>(text: &str, what: &str) -> anyhow::Result<Option<T>>
+where
+    T: TryFrom<i64>,
+{
+    let raw: i64 = text
+        .parse()
+        .with_context(|| format!("Failed to parse {what} {text:?}"))?;
+    if raw < 0 {
+        return Ok(None);
+    }
+    T::try_from(raw)
+        .map(Some)
+        .map_err(|_| anyhow!("Failed to parse {what} {text:?}: out of range"))
+}
+
 /// Parses a whole `perf_record_symbols.txt`. Fails the file - not just the
 /// one line - on the first line that is neither a sample nor a continuation
 /// of the sample right before it, since that means this parser's
@@ -135,9 +170,9 @@ fn parse_symbols_txt(content: &str) -> anyhow::Result<ParsedSamples> {
         let ip = parse_hex_u64(&caps["ip"], "ip")?;
 
         out.comm.push(caps["comm"].to_string());
-        out.pid.push(caps["pid"].parse().context("Failed to parse pid")?);
-        out.tid.push(caps["tid"].parse().context("Failed to parse tid")?);
-        out.cpu.push(caps["cpu"].parse().context("Failed to parse cpu")?);
+        out.pid.push(parse_task_id(&caps["pid"], "pid")?);
+        out.tid.push(parse_task_id(&caps["tid"], "tid")?);
+        out.cpu.push(parse_task_id(&caps["cpu"], "cpu")?);
         out.time.push(caps["time"].parse().context("Failed to parse time")?);
         out.event.push(caps["event"].to_string());
         out.ip.push(ip);
@@ -314,9 +349,9 @@ mod tests {
              \x20\x20bitops.h:207\n",
         );
         assert_eq!(df.comm, vec!["swapper"]);
-        assert_eq!(df.pid, vec![0]);
-        assert_eq!(df.tid, vec![0]);
-        assert_eq!(df.cpu, vec![15]);
+        assert_eq!(df.pid, vec![Some(0)]);
+        assert_eq!(df.tid, vec![Some(0)]);
+        assert_eq!(df.cpu, vec![Some(15)]);
         assert_eq!(df.event, vec!["cycles:ppp"]);
         assert_eq!(df.ip, vec![0xffff_ffff_8d3b_0a9d]);
         let info = &df.symbols[&0xffff_ffff_8d3b_0a9d];
@@ -380,8 +415,8 @@ mod tests {
              7ffff76efafd some_symbol+0x10 (/lib/libjvm.so)\n",
         );
         assert_eq!(df.comm, vec!["GC Thread#0"]);
-        assert_eq!(df.pid, vec![2_983_932]);
-        assert_eq!(df.tid, vec![2_983_951]);
+        assert_eq!(df.pid, vec![Some(2_983_932)]);
+        assert_eq!(df.tid, vec![Some(2_983_951)]);
     }
 
     #[test]
@@ -436,4 +471,43 @@ mod tests {
         let wall = df.column("wall_time").unwrap().datetime().unwrap().phys.get(0).unwrap();
         assert_eq!(wall, 1_700_000_010_000_000);
     }
+
+    #[test]
+    fn an_unattributed_sample_keeps_its_row_with_null_ids() {
+        // perf could not find the task for these, so it renders comm as
+        // ":-1" and tid as -1. Seen 11-17 times in files of ~300k samples
+        // on chile's 2026-09-28 sweep - and before this was handled, those
+        // few lines failed the whole file and cost 170 of 262 runs.
+        let df = samples(
+            "             :-1 3047431/-1    [009] 5544502.753297492:  \
+             mem_inst_retired.all_loads/period=1000003/ppp: ffff9a1f40b28710         \
+             5080022 |OP LOAD|LVL N/A|SNP N/A|TLB N/A|LCK N/A|BLK  N/A      \
+             ffffffff8cd15ea7 __mod_memcg_state+0x27 (/usr/lib/debug/boot/vmlinux-6.1.27)\n\
+             \x20\x20memcontrol.c:744\n",
+        );
+        assert_eq!(df.comm, vec![":-1"]);
+        assert_eq!(df.pid, vec![Some(3_047_431)]);
+        assert_eq!(df.tid, vec![None]);
+        assert_eq!(df.cpu, vec![Some(9)]);
+        assert_eq!(df.ip, vec![0xffff_ffff_8cd1_5ea7]);
+        assert_eq!(df.addr, vec![Some(0xffff_9a1f_40b2_8710)]);
+        let info = &df.symbols[&0xffff_ffff_8cd1_5ea7];
+        assert_eq!(info.symbol.as_deref(), Some("__mod_memcg_state"));
+        assert_eq!(info.srcline.as_deref(), Some("memcontrol.c:744"));
+    }
+
+    #[test]
+    fn a_wholly_unattributed_sample_nulls_pid_tid_and_cpu_together() {
+        let df = samples(
+            "             :-1 -1/-1    [-1] 5544502.753297492: cycles:ppp:  \
+             ffffffff8d3b0a9d poll_idle+0x8d (/usr/lib/debug/boot/vmlinux-6.1.27)\n",
+        );
+        assert_eq!(df.pid, vec![None]);
+        assert_eq!(df.tid, vec![None]);
+        assert_eq!(df.cpu, vec![None]);
+        // The row is still here: an unattributed sample is a real sample.
+        assert_eq!(df.ip.len(), 1);
+    }
+
 }
+
