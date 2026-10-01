@@ -15,25 +15,57 @@ use string_intern::Intern;
 fn parse(bytes: &[u8]) -> anyhow::Result<LazyFrame> {
     let cursor = std::io::Cursor::new(bytes);
 
-    Ok(CsvReadOptions::default()
+    let df = CsvReadOptions::default()
         .with_has_header(true)
         .into_reader_with_file_handle(cursor)
         .finish()
-        .context("Failed to parse perf_stat.csv")?
-        .lazy()
-        .with_columns([
-            // Float64 rather than an integer type because one column holds
-            // both RAPL Joules and raw event counts. A run long enough to
-            // overflow the 2^53 exact-integer range would need ~1e16 events,
-            // well past what a benchmark window reaches, and the ULP there is
-            // still far below counter noise.
-            col("value").cast(DataType::Float64),
-            col("counter_ns").cast(DataType::UInt64),
-            // Below 100 when the kernel had to multiplex the event, i.e. the
-            // value is a scaled estimate rather than a full-window count.
-            // Worth filtering on before trusting a grouped run.
-            col("enabled_pct").cast(DataType::Float64),
-        ]))
+        .context("Failed to parse perf_stat.csv")?;
+
+    // time_s / wall_epoch_us exist only on runs recorded after interval
+    // support was added, and every archive written before it has neither. A
+    // full rebuild re-reads all of them, so these are added only when the
+    // file actually carries them -- referencing a missing column fails the
+    // whole run, which would have taken out every historical perf_stat run
+    // the first time the collector was rebuilt.
+    let has_interval = df.schema().contains("time_s");
+    let mut casts = vec![
+        // Float64 rather than an integer type because one column holds
+        // both RAPL Joules and raw event counts. A run long enough to
+        // overflow the 2^53 exact-integer range would need ~1e16 events,
+        // well past what a benchmark window reaches, and the ULP there is
+        // still far below counter noise.
+        col("value").cast(DataType::Float64),
+        col("counter_ns").cast(DataType::UInt64),
+        // Below 100 when the kernel had to multiplex the event, i.e. the
+        // value is a scaled estimate rather than a full-window count.
+        // Worth filtering on before trusting a grouped run. On an uncore
+        // PMU this is the only warning you get: four CHA events schedule
+        // at 100.00, a fifth silently drops every one of them to 58-100%.
+        col("enabled_pct").cast(DataType::Float64),
+        // Set only on an interval run (`perf_stat_interval_ms`), null
+        // otherwise, and cast for the same reason `value` is: a
+        // non-interval run writes the column empty, which infers as
+        // String and then refuses to concat with the numeric column from
+        // an interval run.
+        //
+        // time_s is perf's own elapsed seconds. wall_time is that mapped
+        // onto the clock zgc_phases uses, anchored at the END of the run
+        // -- see PerfStat._convert in utils/setup.py for why the start is
+        // the worse anchor. The values are PER-INTERVAL DELTAS, unlike
+        // threadstat's cumulative counters: differencing them with a
+        // lag() the way every threadstat metric does would subtract one
+        // interval from the next.
+    ];
+    if has_interval {
+        casts.push(col("time_s").cast(DataType::Float64));
+        casts.push(
+            (col("wall_epoch_us").cast(DataType::Float64) * lit(1_000.0))
+                .cast(DataType::Int64)
+                .cast(DataType::Datetime(TimeUnit::Nanoseconds, None))
+                .alias("wall_time"),
+        );
+    }
+    Ok(df.lazy().with_columns(casts))
 }
 
 #[derive(Default)]
@@ -141,5 +173,51 @@ mod tests {
         ));
         let pct = df.column("enabled_pct").unwrap().f64().unwrap();
         assert!((pct.get(0).unwrap() - 49.98).abs() < 1e-9);
+    }
+
+    #[test]
+    fn an_interval_run_gets_typed_time_and_wall_clock() {
+        // The shape PerfStat writes under `perf_stat_interval_ms`, including
+        // the raw-descriptor event name that contains a comma.
+        let csv = "event,value,unit,counter_ns,enabled_pct,status,time_s,wall_epoch_us\n\
+                   unc_cha_llc_victims.local_m,11711,,178172953,100.00,ok,0.010065669,1000000010066\n\
+                   \"uncore_cha/event=0x37,umask=0x2f/\",15771,,523405725,100.00,ok,0.020062925,1000000020063\n";
+        let df = parse(csv.as_bytes()).unwrap().collect().unwrap();
+        assert_eq!(df.height(), 2);
+        assert_eq!(df.column("time_s").unwrap().dtype(), &DataType::Float64);
+        assert_eq!(
+            df.column("wall_time").unwrap().dtype(),
+            &DataType::Datetime(TimeUnit::Nanoseconds, None)
+        );
+        assert_eq!(
+            df.column("value").unwrap().f64().unwrap().get(0),
+            Some(11711.0)
+        );
+        // wall_epoch_us -> nanoseconds, so the stored instant is us * 1000
+        assert_eq!(
+            df.column("wall_time")
+                .unwrap()
+                .cast(&DataType::Int64)
+                .unwrap()
+                .i64()
+                .unwrap()
+                .get(0),
+            Some(1_000_000_010_066_000)
+        );
+    }
+
+    #[test]
+    fn a_non_interval_run_has_no_time_columns_at_all() {
+        // Every archive written before interval support looks like this, and a
+        // full rebuild re-reads all of them.
+        let csv = "event,value,unit,counter_ns,enabled_pct,status\n\
+                   instructions,1234,,368727,100.00,ok\n";
+        let df = parse(csv.as_bytes()).unwrap().collect().unwrap();
+        assert!(!df.schema().contains("time_s"));
+        assert!(!df.schema().contains("wall_time"));
+        assert_eq!(
+            df.column("value").unwrap().f64().unwrap().get(0),
+            Some(1234.0)
+        );
     }
 }
