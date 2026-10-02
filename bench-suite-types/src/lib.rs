@@ -185,6 +185,15 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 
     perf_events:Intern,
     perf_location:Intern,
+    // `perf stat -I` interval in milliseconds. Unset keeps the one
+    // aggregate count per event per run that PerfStat has always produced;
+    // set, perf prints one row per event per interval and perf_stat.csv
+    // gains time_s / wall_epoch_us. Needed here and not just in the
+    // collector because this struct is deny_unknown_fields: a config key the
+    // Rust side has never heard of makes the whole status file unparseable,
+    // so EVERY run of a sweep that sets it fails to collect, not just its
+    // perf_stat table.
+    perf_stat_interval_ms:NonZero<u64>,
 
     perf_record:bool,
     perf_record_events:Intern,
