@@ -195,6 +195,17 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     // perf_stat table.
     perf_stat_interval_ms:NonZero<u64>,
 
+    // resctrl monitoring (CMT / MBM), sampled by utils/resctrl.py's
+    // ResctrlMon into resctrl_<event>.csv. l3_mon adds llc_occupancy,
+    // memory_mon adds mbm_total_bytes and mbm_local_bytes. Unlike every other
+    // counter in this suite these are attributed to a resctrl GROUP, which is
+    // what lets them separate GC from mutator without relying on core
+    // placement -- COS1 holds the GC's threads.
+    l3_mon:bool,
+    memory_mon:bool,
+    resctrl_mon_frequency:NonZero<u64>,
+    resctrl_mon_groups:Intern,
+
     perf_record:bool,
     perf_record_events:Intern,
     // "none" for no call-graph, otherwise a `--call-graph` mode ("dwarf",
