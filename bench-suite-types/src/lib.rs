@@ -142,6 +142,10 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
 
     java_thp:bool,
 
+    // Superseded by resctrl_groups below, which moved cache allocation out of
+    // the JVM and into the harness. utils/resctrl.py's apply_config now raises
+    // on any of these rather than half-applying them -- they stay here only so
+    // that the runs already in the store keep parsing.
     ResctrlIdleGCMask:NonZero<u64>,
     ResctrlMarkingGCMask:NonZero<u64>,
     ResctrlCollectingGCMask:NonZero<u64>,
@@ -149,6 +153,28 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     ResctrlIdleAppMask:NonZero<u64>,
     ResctrlMarkingAppMask:NonZero<u64>,
     ResctrlCollectingAppMask:NonZero<u64>,
+
+    // resctrl cache allocation and group layout, owned by the harness. A
+    // semicolon-separated spec: "<name>=<hex mask>" is a control group whose
+    // L3 mask the harness writes, "<name>" one left at its default mask, and
+    // "mon:<name>" a monitoring-only group under the GC group, which separates
+    // counters without taking an allocation of its own (the only kind of group
+    // a box with CMT/MBM but no L3 CAT can offer).
+    resctrl_groups:Intern,
+
+    // Which resctrl group each thread class, and each concurrent ZGC phase,
+    // runs in. These pass straight through to the java command line; the JVM
+    // moves its GC workers between groups as phases change, and every name
+    // here must also appear in resctrl_groups. A phase left unset keeps its
+    // workers in ResctrlGCGroup. ZGC only.
+    ResctrlGCGroup:Intern,
+    ResctrlNonGCGroup:Intern,
+    ResctrlYoungMarkGroup:Intern,
+    ResctrlYoungSelectGroup:Intern,
+    ResctrlYoungRelocateGroup:Intern,
+    ResctrlOldMarkGroup:Intern,
+    ResctrlOldSelectGroup:Intern,
+    ResctrlOldRelocateGroup:Intern,
 
 
     //dacapo
