@@ -200,6 +200,7 @@ dependencies = [
  "bench-suite-collector-perf-record",
  "bench-suite-collector-perf-stat",
  "bench-suite-collector-resctrl-mon",
+ "bench-suite-collector-resctrl-status",
  "bench-suite-collector-specjbb",
  "bench-suite-collector-status",
  "bench-suite-collector-system-load",
@@ -401,6 +402,17 @@ dependencies = [
 
 [[package]]
 name = "bench-suite-collector-resctrl-mon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bench-suite-collect-results",
+ "bench-suite-types",
+ "polars",
+ "string-intern",
+]
+
+[[package]]
+name = "bench-suite-collector-resctrl-status"
 version = "0.1.0"
 dependencies = [
  "anyhow",

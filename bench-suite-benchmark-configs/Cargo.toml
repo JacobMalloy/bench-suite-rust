@@ -31,4 +31,5 @@ bench-suite-collector-perf-stat = {path = "../collectors/bench-suite-collector-p
 bench-suite-collector-perf-record = {path = "../collectors/bench-suite-collector-perf-record/"}
 bench-suite-collector-msr = {path = "../collectors/bench-suite-collector-msr/"}
 bench-suite-collector-resctrl-mon = {path = "../collectors/bench-suite-collector-resctrl-mon/"}
+bench-suite-collector-resctrl-status = {path = "../collectors/bench-suite-collector-resctrl-status/"}
 bench-suite-collect-results = {path = "../bench-suite-collect-results/"}
