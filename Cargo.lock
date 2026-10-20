@@ -262,6 +262,7 @@ dependencies = [
  "anyhow",
  "bench-suite-collect-results",
  "bench-suite-types",
+ "chrono",
  "polars",
  "regex",
  "string-intern",
