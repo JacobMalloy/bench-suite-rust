@@ -1,6 +1,11 @@
 use anyhow::Context;
 use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
+// polars 0.55's prelude exports PolarsContext, whose context()/with_context()
+// on PolarsResult make every anyhow .context() on a polars result ambiguous.
+// An explicit import shadows the glob's, leaving only anyhow's in scope.
+#[allow(unused_imports)]
+use anyhow::Context as PolarsContext;
 use std::sync::Arc;
 use string_intern::Intern;
 
@@ -69,7 +74,7 @@ fn parse(bytes: &[u8], file: &str, event: &'static str) -> anyhow::Result<LazyFr
     let labels = df.column("group")?.str()?;
     let mut groups: Vec<Option<&str>> = Vec::with_capacity(df.height());
     let mut domains: Vec<Option<&str>> = Vec::with_capacity(df.height());
-    for label in labels {
+    for label in labels.iter() {
         // A label with no domain suffix is not something ResctrlMon can
         // write, so rather than guess, keep the whole string as the group and
         // leave the domain null where it will be noticed.
@@ -83,7 +88,7 @@ fn parse(bytes: &[u8], file: &str, event: &'static str) -> anyhow::Result<LazyFr
     }
 
     let mut values: Vec<Option<u64>> = Vec::with_capacity(df.height());
-    for value in df.column("value")?.str()? {
+    for value in df.column("value")?.str()?.iter() {
         values.push(match value {
             None | Some("") => None,
             Some(text) => Some(
@@ -178,7 +183,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|v| v.map(str::to_string))
             .collect()
     }

@@ -41,6 +41,11 @@ use bench_suite_collect_results::{BenchSuiteCollect, FileInfoInterface};
 use bench_suite_types::BenchSuiteRun;
 use chrono::DateTime;
 use polars::prelude::*;
+// polars 0.55's prelude exports PolarsContext, whose context()/with_context()
+// on PolarsResult make every anyhow .context() on a polars result ambiguous.
+// An explicit import shadows the glob's, leaving only anyhow's in scope.
+#[allow(unused_imports)]
+use anyhow::Context as PolarsContext;
 use string_intern::Intern;
 
 /// Kernel base page size the bitmaps are in (x86-64).

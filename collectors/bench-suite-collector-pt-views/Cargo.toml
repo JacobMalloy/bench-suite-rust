@@ -12,5 +12,5 @@ bench-suite-types = {path="../../bench-suite-types"}
 bench-suite-collect-results = {path="../../bench-suite-collect-results"}
 string-intern = {workspace = true}
 anyhow = {workspace = true}
-base64 = "0.22"
+base64 = "0.23"
 chrono = "0.4"

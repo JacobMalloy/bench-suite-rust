@@ -3,6 +3,11 @@ use crossbeam::channel;
 use polars::io::parquet::metadata::{ParquetStatistics, deserialize as deserialize_statistics};
 use polars::polars_utils::compression::ZstdLevel;
 use polars::prelude::*;
+// polars 0.55's prelude exports PolarsContext, whose context()/with_context()
+// on PolarsResult make every anyhow .context() on a polars result ambiguous.
+// An explicit import shadows the glob's, leaving only anyhow's in scope.
+#[allow(unused_imports)]
+use anyhow::Context as PolarsContext;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -200,7 +205,7 @@ fn may_contain_dirty_id(path: &Path, modified: &[bool]) -> Result<bool> {
         let Some(mut columns) = row_group.columns_under_root_iter("id") else {
             return Ok(true);
         };
-        let statistics = deserialize_statistics(id_field, &mut columns)
+        let statistics = deserialize_statistics(id_field, &mut columns, &metadata.footer_buf)
             .map_err(|e| anyhow!("Failed to read id statistics: {e}"))?;
         let Some(ParquetStatistics::Column(column)) = statistics else {
             return Ok(true);
@@ -237,7 +242,7 @@ fn keep_mask(df: &DataFrame, modified: &[bool]) -> Result<BooleanChunked> {
     Ok(id_col
         .u64()
         .unwrap()
-        .into_iter()
+        .iter()
         .map(|id| id.is_none_or(|id| !is_dirty(modified, id, false)))
         .collect())
 }

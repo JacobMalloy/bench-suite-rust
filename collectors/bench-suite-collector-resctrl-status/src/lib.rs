@@ -237,7 +237,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|v| v.map(str::to_string))
             .collect()
     }

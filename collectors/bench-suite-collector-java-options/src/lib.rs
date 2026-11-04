@@ -1,6 +1,11 @@
 use anyhow::Context;
 use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
+// polars 0.55's prelude exports PolarsContext, whose context()/with_context()
+// on PolarsResult make every anyhow .context() on a polars result ambiguous.
+// An explicit import shadows the glob's, leaving only anyhow's in scope.
+#[allow(unused_imports)]
+use anyhow::Context as PolarsContext;
 use regex::Regex;
 use std::sync::LazyLock;
 use string_intern::Intern;
@@ -116,7 +121,7 @@ ccstrlist CompileCommand                           =                            
             .unwrap()
             .str()
             .unwrap()
-            .into_no_null_iter()
+            .no_null_iter()
             .collect();
         assert!(names.contains(&"ActiveProcessorCount"));
         assert!(names.contains(&"CompileCommand"));
@@ -126,7 +131,7 @@ ccstrlist CompileCommand                           =                            
             .unwrap()
             .str()
             .unwrap()
-            .into_no_null_iter()
+            .no_null_iter()
             .collect();
         // ccstrlist CompileCommand has no value on the line
         assert!(values.contains(&""));
@@ -137,7 +142,7 @@ ccstrlist CompileCommand                           =                            
             .unwrap()
             .str()
             .unwrap()
-            .into_no_null_iter()
+            .no_null_iter()
             .collect();
         assert!(origins.contains(&"command line"));
         assert!(origins.contains(&"ergonomic"));
@@ -147,7 +152,7 @@ ccstrlist CompileCommand                           =                            
             .unwrap()
             .str()
             .unwrap()
-            .into_no_null_iter()
+            .no_null_iter()
             .collect();
         assert!(categories.contains(&"C2 pd product"));
     }

@@ -1,6 +1,11 @@
 use anyhow::Context;
 use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
+// polars 0.55's prelude exports PolarsContext, whose context()/with_context()
+// on PolarsResult make every anyhow .context() on a polars result ambiguous.
+// An explicit import shadows the glob's, leaving only anyhow's in scope.
+#[allow(unused_imports)]
+use anyhow::Context as PolarsContext;
 use std::sync::Arc;
 use string_intern::Intern;
 
@@ -52,7 +57,7 @@ fn parse(bytes: &[u8], phase: &'static str) -> anyhow::Result<LazyFrame> {
         .with_context(|| format!("Failed to parse msr_{phase}.csv"))?;
 
     let mut values: Vec<Option<u64>> = Vec::with_capacity(df.height());
-    for value in df.column("value")?.str()? {
+    for value in df.column("value")?.str()?.iter() {
         values.push(match value {
             None | Some(UNREADABLE) => None,
             Some(text) => Some(parse_hex(text)?),
@@ -143,7 +148,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .collect()
     }
 

@@ -1,6 +1,11 @@
 use anyhow::Context;
 use bench_suite_collect_results::BenchSuiteCollect;
 use polars::prelude::*;
+// polars 0.55's prelude exports PolarsContext, whose context()/with_context()
+// on PolarsResult make every anyhow .context() on a polars result ambiguous.
+// An explicit import shadows the glob's, leaving only anyhow's in scope.
+#[allow(unused_imports)]
+use anyhow::Context as PolarsContext;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -146,7 +151,7 @@ impl BenchSuiteCollect for BenchSuiteCollectG1Phases {
                             .reverse()
                             .cum_sum(false)
                             .reverse()
-                            .over([col("gc_number")])
+                            .over([col("gc_number")])?
                             .cast(DataType::Int64))
                     .cast(DataType::Datetime(TimeUnit::Milliseconds, None))
                     .alias("start_time"),

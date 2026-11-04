@@ -1,6 +1,11 @@
 use anyhow::{Context, anyhow};
 use bench_suite_collect_results::{BenchSuiteCollect, FileInfoInterface};
 use polars::prelude::*;
+// polars 0.55's prelude exports PolarsContext, whose context()/with_context()
+// on PolarsResult make every anyhow .context() on a polars result ambiguous.
+// An explicit import shadows the glob's, leaving only anyhow's in scope.
+#[allow(unused_imports)]
+use anyhow::Context as PolarsContext;
 use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashMap;
