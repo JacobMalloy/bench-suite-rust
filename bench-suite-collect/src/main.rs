@@ -782,6 +782,15 @@ fn main() {
         drop(s);
     });
 
+    let mut empty_shards_deleted = 0;
+    for (name, mode) in &collection_mode {
+        if let CollectionMode::Incremental { .. } = mode {
+            empty_shards_deleted += drop_redundant_empty_shards(&base_path.join(name))
+                .with_context(|| format!("Failed to drop empty shards from collection {name}"))
+                .unwrap();
+        }
+    }
+
     for name in collection_mode.keys() {
         write_marker(&base_path.join(name), run_start_ms)
             .with_context(|| format!("Failed to write marker for collection {name}"))
@@ -807,6 +816,60 @@ fn main() {
     println!(
         "Pruning left {skipped_by_statistics} file(s) unread on row-group statistics alone, and {skipped_by_id_column} more after reading just their id column."
     );
+    if empty_shards_deleted > 0 {
+        println!("Deleted {empty_shards_deleted} empty shard(s) of tables that have other shards.");
+    }
+}
+
+/// The table a `<table>_<N>.parquet` shard belongs to, and its index.
+fn shard_table(name: &str) -> Option<(&str, u64)> {
+    let (table, index) = name.strip_suffix(".parquet")?.rsplit_once('_')?;
+    Some((table, index.parse().ok()?))
+}
+
+/// Deletes the 0-row shards of every table in `collection_path` that has any
+/// other shard, returning how many went. A table with no rows anywhere keeps
+/// its lowest-index shard, which still carries the schema.
+///
+/// A full collection writes an empty shard only for a table that is empty in
+/// every run. An incremental one writes the dirty runs' rows to fresh shards
+/// beside the old ones, and pruning keeps an empty old shard (it has no row
+/// groups, so no dirty ids), so without this every recollection of a run
+/// that has an empty table adds one more empty file for it.
+fn drop_redundant_empty_shards(collection_path: &Path) -> Result<u64> {
+    let mut tables: HashMap<String, Vec<(u64, PathBuf, bool)>> = HashMap::new();
+    for entry in fs::read_dir(collection_path).context("Failed to list collection directory")? {
+        let path = entry.context("Failed to read collection directory entry")?.path();
+        let Some((table, index)) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(shard_table)
+            .map(|(t, i)| (t.to_string(), i))
+        else {
+            continue;
+        };
+        let rows = ParquetReader::new(File::open(&path).context("Failed to open parquet file")?)
+            .num_rows()
+            .with_context(|| format!("Failed to read the row count of {}", path.display()))?;
+        tables.entry(table).or_default().push((index, path, rows == 0));
+    }
+
+    let mut deleted = 0;
+    for mut shards in tables.into_values() {
+        shards.sort_by_key(|(index, _, _)| *index);
+        let keep = shards
+            .iter()
+            .position(|(_, _, empty)| !empty)
+            .unwrap_or(0);
+        for (i, (_, path, empty)) in shards.iter().enumerate() {
+            if *empty && i != keep {
+                fs::remove_file(path)
+                    .with_context(|| format!("Failed to delete empty shard {}", path.display()))?;
+                deleted += 1;
+            }
+        }
+    }
+    Ok(deleted)
 }
 
 #[cfg(test)]
@@ -971,5 +1034,36 @@ mod tests {
         assert_eq!(read_ids(&dir.file("clean.parquet")), vec![1, 2]);
         assert_eq!(read_ids(&dir.file("partial.parquet")), vec![10]);
         assert!(!dir.file("gone.parquet").exists());
+    }
+
+    #[test]
+    fn shard_names() {
+        assert_eq!(shard_table("zgc_phases_12.parquet"), Some(("zgc_phases", 12)));
+        assert_eq!(shard_table("pt_views_sample_0.parquet"), Some(("pt_views_sample", 0)));
+        assert_eq!(shard_table("zgc_phases.parquet"), None);
+        assert_eq!(shard_table(".bench_suite_marker.json"), None);
+    }
+
+    #[test]
+    fn empty_shards_go_only_when_the_table_has_another() {
+        let dir = TempDir::new();
+        // a: rows in 1, empty 0 and 2 -> both empties go
+        write_ids(&dir.file("a_0.parquet"), &[]);
+        write_ids(&dir.file("a_1.parquet"), &[3]);
+        write_ids(&dir.file("a_2.parquet"), &[]);
+        // b_c: empty everywhere -> keeps its lowest index
+        write_ids(&dir.file("b_c_4.parquet"), &[]);
+        write_ids(&dir.file("b_c_7.parquet"), &[]);
+        // d: one empty shard alone -> kept
+        write_ids(&dir.file("d_0.parquet"), &[]);
+        fs::write(dir.file("note.txt"), "not a shard").unwrap();
+
+        assert_eq!(drop_redundant_empty_shards(&dir.0).unwrap(), 3);
+        let mut left: Vec<String> = fs::read_dir(&dir.0)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["a_1.parquet", "b_c_4.parquet", "d_0.parquet", "note.txt"]);
     }
 }
