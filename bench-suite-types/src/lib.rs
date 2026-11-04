@@ -182,6 +182,9 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     dacapo_location:Intern,
     dacapo_threads:NonZero<u64>,
     dacapo_harness:Intern,
+    // `-n` for the DaCapo run. Unset keeps the per-benchmark, per-size
+    // count from the harness's DACAPO_ITERATIONS table.
+    dacapo_iterations:NonZero<u64>,
 
     //specjbb
     specjbb_location:Intern,
@@ -254,6 +257,13 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     perf_record_freq:NonZero<u64>,
 
     java_dump_perf_map:bool,
+
+    // -XX:+UsePTViews on the jdk-24 pt-views branch: GC threads run on their
+    // own page table view, and both views' accessed bitmaps over the heap are
+    // written to ptviews.<pid>.csv at the end of every collection (format in
+    // that branch's gc/shared/ptViews.hpp); collected as pt_views_sample /
+    // pt_views_range.
+    java_pt_views:bool,
 
     //cos
     cos_config:Intern,
