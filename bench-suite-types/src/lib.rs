@@ -255,6 +255,19 @@ make_vectorized!(BenchSuiteRun,BenchSuiteConfig,{
     perf_record_intr_regs:Intern,
     perf_record_user_regs:Intern,
     perf_record_freq:NonZero<u64>,
+    // `perf record -c`: one sample every N events, where perf_record_freq is
+    // samples per second and perf adapts the period to hold it. Mutually
+    // exclusive - perf rejects both, and so does the Python side.
+    //
+    // This is the only setting that works on an event from perf's JSON alias
+    // table, because such an event carries its own period (`perf list
+    // --details icache.misses` -> `cpu/event=0x80,period=200003,umask=2/`)
+    // and that wins over --freq AND over a `period=` term written into
+    // perf_record_events. Measured on brazil: cycles:pp honoured --freq 997
+    // exactly while icache.misses on the same runs sampled at 200003
+    // whatever was asked for, so two sweeps' sample counts matched to 2%
+    // despite completely different settings.
+    perf_record_period:NonZero<u64>,
 
     java_dump_perf_map:bool,
 
